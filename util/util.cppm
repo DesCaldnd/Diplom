@@ -18,6 +18,8 @@ module;
 #include <algorithm>
 #include <queue>
 #include <type_traits>
+#include <initializer_list>
+#include <ranges>
 
 export module util;
 
@@ -44,15 +46,28 @@ export namespace std
     using std::string;
     using std::operator>>;
     using std::operator<<;
+    using std::initializer_list;
     namespace ranges
     {
         using std::ranges::next_permutation;
         using std::ranges::next_permutation_result;
+        using std::ranges::operator|;
+        using std::ranges::transform;
+        using std::ranges::transform_view;
+        using std::ranges::range;
+
+        namespace views 
+        {
+            using std::ranges::views::transform;
+        }
     }
     using std::queue;
     using std::remove_cvref_t;
     using std::reference_wrapper;
     using std::operator==;
+    using std::operator|;
+    using std::hash;
+    using std::pair;
 }
 
 export {

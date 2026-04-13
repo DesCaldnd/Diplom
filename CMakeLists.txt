@@ -9,11 +9,12 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 # Настройка путей для LLVM/Clang на macOS
 if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Получаем путь к macOS SDK
-    execute_process(
-        COMMAND xcrun --show-sdk-path
-        OUTPUT_VARIABLE MACOS_SDK_PATH
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
+    # execute_process(
+    #     COMMAND xcrun --show-sdk-path
+    #     OUTPUT_VARIABLE MACOS_SDK_PATH
+    #     OUTPUT_STRIP_TRAILING_WHITESPACE
+    # )
+    set(MACOS_SDK_PATH "/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk")
     
     # Добавляем пути к системным заголовкам
     include_directories(SYSTEM ${MACOS_SDK_PATH}/usr/include)
