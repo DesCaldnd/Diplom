@@ -16,10 +16,10 @@ Compute::Point<1> func2(Compute::Point<1> arg)
 
 Compute::Point<1> func3(Compute::Point<1> arg)
 {
-    if (arg[0] > -2 && arg[0] < -1)
+    if (!(arg[0] > -2 && arg[0] < -1))
         return 0;
     else
-        return std::abs(1.5 - arg[0]) - 0.5;
+        return std::abs(1.5 + arg[0]) - 0.5;
 }
 
 void print(double a, double b)
@@ -28,34 +28,34 @@ void print(double a, double b)
 }
 
 int main() {
-    Compute::Point<2> min = {0, 0}, max = {1, 1};
-    Compute::AdaptiveSparseGrid grid(&func, min, max, 0.0000001);
-    Compute::AdaptiveSparseGrid grid2 = grid.make_next_iteration(&func2, 0.0000001);
+    // Compute::Point<2> min = {0, 0}, max = {1, 1};
+    // Compute::AdaptiveSparseGrid grid(&func, min, max, 0.0000001);
+    // Compute::AdaptiveSparseGrid grid2 = grid.make_next_iteration(&func2, 0.0000001);
 
-    Compute::Point<2> arg;
-    std::cout << "Eval:" << std::endl;
+    // Compute::Point<2> arg;
+    // std::cout << "Eval:" << std::endl;
 
-    arg = {0, 0};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {0, 0};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
-    arg = {0, 0.6};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {0, 0.6};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
-    arg = {0.3, 0};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {0.3, 0};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
-    arg = {0.6, 0.3};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {0.6, 0.3};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
-    arg = {0.5, 0.5};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {0.5, 0.5};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
-    arg = {1, 1};
-    print(grid2.evaluate(arg)[0], func(arg)[0]);
+    // arg = {1, 1};
+    // print(grid2.evaluate(arg)[0], func(arg)[0]);
 
 
     Compute::Point<1> min3 = {-10}, max3 = {10};
-    Compute::AdaptiveSparseGrid grid3(&func3, min3, max3, 0.0000001, {{-4}});
+    Compute::AdaptiveSparseGrid grid3(&func3, min3, max3, 0.0000001, {{-1.5}});
     Compute::Point<1> arg2;
     std::cout << std::endl << std::endl;
 

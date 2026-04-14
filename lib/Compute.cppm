@@ -1,9 +1,10 @@
 //
 // Created by ivanl on 01.03.2026.
 //
-// добавить причину для якоря
 // асинхронка
 module;
+
+#include <proto/grid.pb.h>
 
 export module compute;
 
@@ -183,23 +184,30 @@ export namespace Compute
                 Node &node = nodes_[node_queue.front()];
                 node_queue.pop();
 
+                bool can_continue = false;
+                VectorValue<Direction, IN_DIM> directions(Direction::BOTH);
+
                 if (node.alpha.length() <= epsilon)
                 {
-                    bool can_continue = true;
+                    directions.fill(Direction::NONE);
+                    can_continue = true;
+                }
 
-                    for (auto& anchor : anchors)
+                if (can_continue)
+                {
+                    for (auto &anchor : anchors)
                     {
                         if (node.is_point_in_affect_zone(anchor.first) && (evaluate_for_dim_and_entry_point(node.center_unit, dimension, entry_point) - anchor.second).length() >= epsilon)
                         {
                             can_continue = false;
-                            break;
+                            directions |= Basis::get_affect_direction(anchor.first, node.key.level, node.key.index);
                         }
                     }
+                }
 
-                    if (can_continue)
-                    {
-                        continue;
-                    }
+                if (can_continue)
+                {
+                    continue;
                 }
 
                 node.has_children = true;
@@ -216,13 +224,20 @@ export namespace Compute
                     key_left.index[i] = 2 * node.key.index[i] - 1;
                     key_right.index[i] = 2 * node.key.index[i] + 1;
 
-                    auto left_node = create_node(func, key_left, entry_point, dimension);
-                    auto right_node = create_node(func, key_right, entry_point, dimension);
+                    if ((Direction::LEFT | directions[i]) != Direction::NONE)
+                    {
+                        auto left_node = create_node(func, key_left, entry_point, dimension);
+                        if (left_node.has_value())
+                            node_queue.push(left_node.value());
+                    }
 
-                    if (left_node.has_value())
-                        node_queue.push(left_node.value());
-                    if (right_node.has_value())
-                        node_queue.push(right_node.value());
+                    if ((Direction::RIGHT | directions[i]) != Direction::NONE)
+                    {
+                        auto right_node = create_node(func, key_right, entry_point, dimension);
+
+                        if (right_node.has_value())
+                            node_queue.push(right_node.value());
+                    }
                 }
             }
         }

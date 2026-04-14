@@ -1,0 +1,33 @@
+# docker-compose.yml для настройки подъема сервера и nginx
+
+version: '3.8'
+
+services:
+  # Сервис gRPC сервера
+  server:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: grpc_server
+    ports:
+      - "50051:50051"  # Открываем порт для прямого доступа к серверу (опционально)
+    networks:
+      - app_network
+
+  # Сервис nginx
+  nginx:
+    image: nginx:latest
+    container_name: nginx_proxy
+    ports:
+      - "80:80"  # Порт для доступа к nginx
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf  # Монтируем конфиг nginx
+    depends_on:
+      - server
+    networks:
+      - app_network
+
+# Определение сети для взаимодействия между сервисами
+networks:
+  app_network:
+    driver: bridge

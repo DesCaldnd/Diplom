@@ -25,6 +25,24 @@ export namespace Compute
         bool operator==(const GridKey &other) const = default;
     };
 
+    enum class Direction
+    {
+        NONE = 1 << 0,
+        LEFT = 1 << 1,
+        RIGHT = 1 << 2,
+        BOTH = LEFT | RIGHT
+    };
+
+    constexpr Direction operator|(Direction a, Direction b)
+    {
+        return static_cast<Direction>(static_cast<int>(a) | static_cast<int>(b));
+    }
+
+    constexpr Direction operator|=(Direction &a, Direction b)
+    {
+        return a = a | b;
+    }
+
     template <size_t DIM>
     class Basis
     {
@@ -91,6 +109,18 @@ export namespace Compute
             ScalarType unit = static_cast<ScalarType>(1) / (1 << level);
             ScalarType coord = static_cast<ScalarType>(index) / (1 << level);
             return {coord - unit, coord + unit};
+        }
+
+        static VectorValue<Direction, DIM> get_affect_direction(const Point<DIM> &x, const Index<DIM> &level, const Index<DIM> &index)
+        {
+            VectorValue<Direction, DIM> result = Direction::NONE;
+            for (size_t i = 0; i < DIM; ++i)
+            {
+                ScalarType coord = level[i] > 0 ? static_cast<ScalarType>(index[i]) / (1 << level[i]) : index[i];
+                result[i] = x[i] < coord ? Direction::LEFT : Direction::RIGHT;
+            }
+
+            return result;
         }
     };
 

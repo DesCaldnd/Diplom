@@ -40,6 +40,11 @@ export namespace Compute
             coords.fill(val);
         }
 
+        void fill(const T &val)
+        {
+            coords.fill(val);
+        }
+
         T &operator[](size_t i) { return coords[i]; }
         const T &operator[](size_t i) const { return coords[i]; }
         const
@@ -77,7 +82,7 @@ export namespace Compute
             return res;
         }
 
-        VectorValue &operator*=(const VectorValue &other) const
+        VectorValue &operator*=(const VectorValue &other)
         {
             for (size_t i = 0; i < DIM; ++i)
             {
@@ -90,6 +95,22 @@ export namespace Compute
         {
             VectorValue res(*this);
             res *= other;
+            return res;
+        }
+
+        VectorValue &operator|=(const VectorValue &other)
+        {
+            for (size_t i = 0; i < DIM; ++i)
+            {
+                coords[i] |= other.coords[i];
+            }
+            return *this;
+        }
+
+        VectorValue operator|(const VectorValue &other) const
+        {
+            VectorValue res(*this);
+            res |= other;
             return res;
         }
 

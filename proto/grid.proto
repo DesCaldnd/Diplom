@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package grid;
+
+message Point2D {
+    double x = 1;
+    double y = 2;
+}
+
+message Grid2DRequest {
+    string formula = 1;
+    Point2D min = 2;
+    Point2D max = 3;
+    double eps = 4;
+    optional int32 step = 5;
+}
+
+message Grid2D {
+    enum BasisType {
+        LINEAR = 0;
+        QUADRATIC = 1;
+    }
+    message Index2D {
+        int32 x = 1;
+        int32 y = 2;
+    }
+    message GridKey2D {
+        Index2D index = 1;
+        BasisType level = 2;
+    }
+    message Node2D {
+        GridKey2D key = 1;
+        Point2D center_unit = 2;
+        double alpha = 3;
+        bool has_children = 4;
+    }
+
+    repeated Node2D nodes = 1;
+    repeated Node2D entry_points = 2;
+    Point2D min = 3;
+    Point2D max = 4;
+    BasisType basis_type = 5;
+}
+
+service GridService {
+    rpc GetGrid2D (Grid2DRequest) returns (Grid2D);
+}
