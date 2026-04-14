@@ -20,6 +20,7 @@ module;
 #include <type_traits>
 #include <initializer_list>
 #include <ranges>
+#include <future>
 
 export module util;
 
@@ -68,6 +69,9 @@ export namespace std
     using std::operator|;
     using std::hash;
     using std::pair;
+    using std::async;
+    using std::launch;
+    using std::future;
 }
 
 export {

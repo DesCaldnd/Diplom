@@ -27,9 +27,9 @@ export namespace Compute
 
     enum class Direction
     {
-        NONE = 1 << 0,
-        LEFT = 1 << 1,
-        RIGHT = 1 << 2,
+        NONE = 0,
+        LEFT = 1 << 0,
+        RIGHT = 1 << 1,
         BOTH = LEFT | RIGHT
     };
 
@@ -42,6 +42,17 @@ export namespace Compute
     {
         return a = a | b;
     }
+
+    constexpr Direction operator&(Direction a, Direction b)
+    {
+        return static_cast<Direction>(static_cast<int>(a) & static_cast<int>(b));
+    }
+
+    constexpr Direction operator&=(Direction &a, Direction b)
+    {
+        return a = a & b;
+    }
+
 
     template <size_t DIM>
     class Basis

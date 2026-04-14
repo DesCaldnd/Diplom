@@ -4,8 +4,6 @@
 // асинхронка
 module;
 
-#include <proto/grid.pb.h>
-
 export module compute;
 
 import util;
@@ -16,6 +14,12 @@ import helper_types;
 export namespace Compute
 {
     using Compute::BasisType;
+
+    enum class BuildType
+    {
+        SEQUENTIAL,
+        PARALLEL,
+    };
 
     template <size_t IN_DIM, size_t OUT_DIM>
     class AdaptiveSparseGrid
@@ -57,10 +61,10 @@ export namespace Compute
     public:
         template <function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
         AdaptiveSparseGrid(const FUNC &func, Point min, Point max, ScalarType epsilon, const std::vector<Argument>& anchor_points = {},
-                           BasisType basis_type = BasisType::QUADRATIC) : min_(min), max_(max), basis_type_(basis_type)
+                           BasisType basis_type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL) : min_(min), max_(max), basis_type_(basis_type)
         {
             entry_points_.reserve(pow_3(IN_DIM));
-            build(func, epsilon, calculate_original_function_at_points(func, anchor_points));
+            build(func, epsilon, calculate_original_function_at_points(func, anchor_points), build_type);
         }
 
         Answer evaluate(const Argument &x) const
@@ -72,7 +76,7 @@ export namespace Compute
         template <function_traits::ArrayOpIn<ScalarType, OUT_DIM> FUNC>
         AdaptiveSparseGrid make_next_iteration(const FUNC &func, ScalarType epsilon, std::optional<std::vector<Argument>> anchor_points = {}, std::optional<BasisType> basis_type = {})
         {
-            return AdaptiveSparseGrid(NextIterationWrapper<FUNC>(func, *this), min_, max_, epsilon, anchor_points.value_or({}), basis_type.value_or(basis_type_));
+            return AdaptiveSparseGrid(NextIterationWrapper<FUNC>(func, *this), min_, max_, epsilon, anchor_points.value_or(std::vector<Argument>{}), basis_type.value_or(basis_type_));
         }
 
     private:
@@ -127,8 +131,9 @@ export namespace Compute
         }
 
         template <function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
-        void build(const FUNC &func, ScalarType epsilon, const std::vector<std::pair<Argument, Answer>>& anchors)
+        void build(const FUNC &func, ScalarType epsilon, const std::vector<std::pair<Argument, Answer>>& anchors, BuildType build_type)
         {
+            const auto launch_type = build_type == BuildType::PARALLEL ? std::launch::async : std::launch::deferred;
             for (size_t i = 0; i <= IN_DIM; ++i)
             {
                 GridKey key;
@@ -140,6 +145,8 @@ export namespace Compute
                     key.level[IN_DIM - j - 1] = 1;
                 }
 
+                std::vector<std::future<std::pair<Node, NodeMap>>> futures;
+
                 do
                 {
                     size_t index_permutations = 1zu << (IN_DIM - i);
@@ -147,14 +154,21 @@ export namespace Compute
                     for (size_t j = 0; j < index_permutations; ++j)
                     {
                         expand_indicies(key, j);
-                        EntryPoint entry_point;
-                        entry_point.dimensions = i;
-                        Node &node = nodes_[create_node(func, key, {}, i).value()];
-                        build_grid(func, epsilon, anchors, node, i);
-                        entry_point.node = node;
-                        entry_points_.push_back(entry_point);
+                        NodeMap tmp;
+                        Node node = tmp[create_node(func, key, {}, i, tmp).value()];
+                        futures.emplace_back(std::async(launch_type, &AdaptiveSparseGrid::template build_grid<FUNC>, this, func, epsilon, anchors, node, i));
                     }
                 } while (std::ranges::next_permutation(key.level.coords).found);
+
+                for (auto& future : futures)
+                {
+                    auto [node, new_nodes] = future.get();
+                    EntryPoint entry_point;
+                    entry_point.dimensions = i;
+                    entry_point.node = node;
+                    entry_points_.push_back(entry_point);
+                    nodes_.insert_range(new_nodes);
+                }
             }
         }
 
@@ -174,14 +188,16 @@ export namespace Compute
         }
 
         template <function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
-        void build_grid(const FUNC &func, ScalarType epsilon, const std::vector<std::pair<Argument, Answer>>& anchors, const Node &entry_point, size_t dimension)
+        std::pair<Node, NodeMap> build_grid(const FUNC &func, ScalarType epsilon, const std::vector<std::pair<Argument, Answer>>& anchors, Node entry_point, size_t dimension)
         {
             std::queue<GridKey> node_queue;
             node_queue.push(entry_point.key);
+            NodeMap new_nodes;
+            new_nodes.emplace(entry_point.key, entry_point);
 
             while (!node_queue.empty())
             {
-                Node &node = nodes_[node_queue.front()];
+                Node &node = new_nodes[node_queue.front()];
                 node_queue.pop();
 
                 bool can_continue = false;
@@ -197,7 +213,7 @@ export namespace Compute
                 {
                     for (auto &anchor : anchors)
                     {
-                        if (node.is_point_in_affect_zone(anchor.first) && (evaluate_for_dim_and_entry_point(node.center_unit, dimension, entry_point) - anchor.second).length() >= epsilon)
+                        if (node.is_point_in_affect_zone(anchor.first) && (evaluate_for_dim_and_entry_point(anchor.first, dimension, entry_point, new_nodes) - anchor.second).length() >= epsilon)
                         {
                             can_continue = false;
                             directions |= Basis::get_affect_direction(anchor.first, node.key.level, node.key.index);
@@ -224,39 +240,45 @@ export namespace Compute
                     key_left.index[i] = 2 * node.key.index[i] - 1;
                     key_right.index[i] = 2 * node.key.index[i] + 1;
 
-                    if ((Direction::LEFT | directions[i]) != Direction::NONE)
+                    if ((Direction::LEFT & directions[i]) != Direction::NONE)
                     {
-                        auto left_node = create_node(func, key_left, entry_point, dimension);
+                        auto left_node = create_node(func, key_left, new_nodes[entry_point.key], dimension, new_nodes);
                         if (left_node.has_value())
+                        {
                             node_queue.push(left_node.value());
+                        }
                     }
 
-                    if ((Direction::RIGHT | directions[i]) != Direction::NONE)
+                    if ((Direction::RIGHT & directions[i]) != Direction::NONE)
                     {
-                        auto right_node = create_node(func, key_right, entry_point, dimension);
+                        auto right_node = create_node(func, key_right, new_nodes[entry_point.key], dimension, new_nodes);
 
                         if (right_node.has_value())
+                        {
                             node_queue.push(right_node.value());
+                        }
                     }
                 }
             }
+
+            return {new_nodes[entry_point.key], new_nodes};
         }
 
-        Answer evaluate_for_dim_and_entry_point(const Argument &x, size_t max_grid_dim, std::optional<Node> entry_point)
+        Answer evaluate_for_dim_and_entry_point(const Argument &x, size_t max_grid_dim, std::optional<Node> entry_point, const NodeMap& additional_nodes = {})
         {
             Answer interp = evaluate_for_dim(x, max_grid_dim);
             if (entry_point.has_value())
             {
                 NodeSet processed_nodes;
-                interp += evaluate_recursive(x, entry_point.value(), processed_nodes);
+                interp += evaluate_recursive(x, entry_point.value(), processed_nodes, additional_nodes);
             }
             return interp;
         }
 
         template <function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
-        std::optional<GridKey> create_node(const FUNC &func, const GridKey &key, std::optional<Node> entry_point, size_t dimension)
+        std::optional<GridKey> create_node(const FUNC &func, const GridKey &key, std::optional<Node> entry_point, size_t dimension, NodeMap& additional_nodes)
         {
-            if (nodes_.contains(key))
+            if (additional_nodes.contains(key))
                 return {};
 
             Node node;
@@ -266,11 +288,11 @@ export namespace Compute
 
             Argument real = to_real(node.center_unit);
             Answer etalon = func(real.coords);
-            Answer interp = evaluate_for_dim_and_entry_point(node.center_unit, dimension, entry_point);
+            Answer interp = evaluate_for_dim_and_entry_point(node.center_unit, dimension, entry_point, additional_nodes);
 
             node.alpha = etalon - interp;
 
-            nodes_[key] = node;
+            additional_nodes[key] = node;
             return key;
         }
 
@@ -289,7 +311,7 @@ export namespace Compute
             return answer;
         }
 
-        Answer evaluate_recursive(const Argument &x, const Node &node, NodeSet &processed_nodes) const
+        Answer evaluate_recursive(const Argument &x, const Node &node, NodeSet &processed_nodes, const NodeMap& additional_nodes = {}) const
         {
             if (processed_nodes.contains(node.key))
                 return 0;
@@ -310,10 +332,10 @@ export namespace Compute
                 {
                     if (node.key.level[i] != 0)
                     {
-                        auto child = get_child_for_dim_and_arg(node, x, i);
+                        auto child = get_child_for_dim_and_arg(node, x, i, additional_nodes);
                         if (child.has_value())
                         {
-                            value += evaluate_recursive(x, child.value(), processed_nodes);
+                            value += evaluate_recursive(x, child.value(), processed_nodes, additional_nodes);
                         }
                     }
                 }
@@ -321,7 +343,7 @@ export namespace Compute
             return value;
         }
 
-        std::optional<Node> get_child_for_dim_and_arg(const Node &parent, const Argument &x, size_t dimension) const
+        std::optional<Node> get_child_for_dim_and_arg(const Node &parent, const Argument &x, size_t dimension, const NodeMap& additional_nodes = {}) const
         {
             GridKey key = parent.key;
             key.level[dimension] += 1;
@@ -330,20 +352,23 @@ export namespace Compute
             auto child = nodes_.find(key);
             if (child != nodes_.end())
                 return child->second;
+            child = additional_nodes.find(key);
+            if (child != additional_nodes.end())
+                return child->second;
             else
                 return {};
         }
     };
 
     template <size_t IN_DIM, typename FUNC>
-    AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
+    AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
     template <size_t IN_DIM, typename FUNC>
-    AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, std::array<ScalarType, IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
+    AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, std::array<ScalarType, IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
     template <size_t IN_DIM, typename FUNC>
-    AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, std::array<ScalarType, IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
+    AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, std::array<ScalarType, IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
     template <size_t IN_DIM, typename FUNC>
-    AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
+    AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon, const std::vector<Point<IN_DIM>>& anchor_points = {}, BasisType type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL) -> AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 }

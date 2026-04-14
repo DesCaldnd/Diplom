@@ -1,5 +1,8 @@
-// Модуль server - реализация gRPC сервиса
-// Здесь будет реализация gRPC ручки
+module;
+
+#include <grpcpp/grpcpp.h>
+#include <proto/grid.pb.h>
+#include <proto/grid.grpc.pb.h>
 
 export module server;
 
