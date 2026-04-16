@@ -1,21 +1,18 @@
-// Файл main_api.cpp - точка входа для запуска gRPC сервера
-
 #include <iostream>
-
-// Здесь будет код для запуска gRPC сервера
-// После реализации модуля server, подключите его здесь
-// и реализуйте логику запуска сервера
+#include <grpcpp/grpcpp.h>
+import server;
 
 int main() {
     std::cout << "Starting gRPC server..." << std::endl;
+
+    GridServer service;
     
     // TODO: Добавьте здесь код для запуска gRPC сервера
-    // Пример:
-    // ServerBuilder builder;
-    // builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    // builder.RegisterService(&service);
-    // std::unique_ptr<Server> server(builder.BuildAndStart());
-    // server->Wait();
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort("0.0.0.0:9999", grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+    std::unique_ptr<grpc::Server> server(builder.BuildAndStart());
+    server->Wait();
     
     return 0;
 }

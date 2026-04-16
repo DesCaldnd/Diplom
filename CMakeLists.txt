@@ -22,6 +22,7 @@ endif()
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_path(EXPRTK_INCLUDE_DIRS "exprtk.hpp")
 
 add_library(protolib proto/grid.proto)
 target_link_libraries(protolib PUBLIC gRPC::grpc++)

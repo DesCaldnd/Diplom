@@ -7,36 +7,50 @@ message Point2D {
     double y = 2;
 }
 
+enum BasisType {
+    LINEAR = 0;
+    QUADRATIC = 1;
+}
+
+enum BuildType {
+    SEQUENTIAL = 0;
+    PARALLEL = 1;
+}
+
 message Grid2DRequest {
-    string formula = 1;
-    Point2D min = 2;
-    Point2D max = 3;
-    double eps = 4;
-    optional int32 step = 5;
+    string formula_x = 1;
+    string formula_y = 2;
+    Point2D min = 3;
+    Point2D max = 4;
+    double eps = 5;
+    BuildType build_type = 6;
+    BasisType basis_type = 7;
+    repeated Point2D anchor_points = 8;
+    optional int32 step = 9;
 }
 
 message Grid2D {
-    enum BasisType {
-        LINEAR = 0;
-        QUADRATIC = 1;
-    }
     message Index2D {
         int32 x = 1;
         int32 y = 2;
     }
     message GridKey2D {
         Index2D index = 1;
-        BasisType level = 2;
+        Index2D level = 2;
     }
     message Node2D {
         GridKey2D key = 1;
         Point2D center_unit = 2;
-        double alpha = 3;
+        Point2D alpha = 3;
         bool has_children = 4;
+    }
+    message EntryPoint2D {
+        Node2D node = 1;
+        int32 dimension = 2;
     }
 
     repeated Node2D nodes = 1;
-    repeated Node2D entry_points = 2;
+    repeated EntryPoint2D entry_points = 2;
     Point2D min = 3;
     Point2D max = 4;
     BasisType basis_type = 5;

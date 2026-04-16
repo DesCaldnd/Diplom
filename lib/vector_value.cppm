@@ -144,6 +144,19 @@ export namespace Compute
             }
             return true;
         }
+
+        T max()
+        {
+            auto result = coords[0];
+
+            for (size_t i = 1; i < DIM; ++i)
+            {
+                if (coords[i] > result)
+                    result = coords[i];
+            }
+
+            return result;
+        }
     };
 
     using ScalarType = double;

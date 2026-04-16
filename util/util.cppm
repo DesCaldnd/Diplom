@@ -21,6 +21,8 @@ module;
 #include <initializer_list>
 #include <ranges>
 #include <future>
+#include <functional>
+#include <thread>
 
 export module util;
 
@@ -72,6 +74,15 @@ export namespace std
     using std::async;
     using std::launch;
     using std::future;
+    using std::void_t;
+    using std::mutex;
+    using std::lock_guard;
+    using std::ref;
+    using std::atomic_flag;
+    namespace this_thread
+    {
+        using std::this_thread::yield;
+    }
 }
 
 export {

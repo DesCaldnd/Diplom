@@ -5,7 +5,8 @@ target_sources(server
         FILE_SET CXX_MODULES FILES server.cppm
 )
 
-target_link_libraries(server PUBLIC protolib compute)
+target_link_libraries(server PUBLIC protolib compute util)
+target_include_directories(server PRIVATE ${EXPRTK_INCLUDE_DIRS})
 
 add_executable(main_api main_api.cpp)
 

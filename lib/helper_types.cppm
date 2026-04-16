@@ -70,7 +70,7 @@ export namespace Compute
                 return 0.0;
             }
 
-            ScalarType h = 1.0 / (1 << level);
+            ScalarType h = static_cast<ScalarType>(1.0) / (1uz << level);
             ScalarType center = static_cast<ScalarType>(index) * h;
             ScalarType dist = std::abs(x - center);
 
@@ -112,13 +112,13 @@ export namespace Compute
         {
             if (level == 0)
                 return (index == 0) ? 0.0 : 1.0;
-            return static_cast<ScalarType>(index) / (1 << level);
+            return static_cast<ScalarType>(index) / (1uz << level);
         }
 
         static std::pair<ScalarType, ScalarType> get_affect_bounds(size_t level, size_t index)
         {
-            ScalarType unit = static_cast<ScalarType>(1) / (1 << level);
-            ScalarType coord = static_cast<ScalarType>(index) / (1 << level);
+            ScalarType unit = static_cast<ScalarType>(1) / (1uz << level);
+            ScalarType coord = static_cast<ScalarType>(index) / (1uz << level);
             return {coord - unit, coord + unit};
         }
 
@@ -127,7 +127,7 @@ export namespace Compute
             VectorValue<Direction, DIM> result = Direction::NONE;
             for (size_t i = 0; i < DIM; ++i)
             {
-                ScalarType coord = level[i] > 0 ? static_cast<ScalarType>(index[i]) / (1 << level[i]) : index[i];
+                ScalarType coord = level[i] > 0 ? static_cast<ScalarType>(index[i]) / (1uz << level[i]) : index[i];
                 result[i] = x[i] < coord ? Direction::LEFT : Direction::RIGHT;
             }
 

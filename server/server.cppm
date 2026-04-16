@@ -3,9 +3,146 @@ module;
 #include <grpcpp/grpcpp.h>
 #include <proto/grid.pb.h>
 #include <proto/grid.grpc.pb.h>
+#include <exprtk.hpp>
 
 export module server;
 
-// Добавьте здесь реализацию вашего gRPC сервиса
-// После генерации кода из proto файла, импортируйте необходимые модули
-// и реализуйте сервис согласно определению в proto файле
+import util;
+import compute;
+
+class Formula final
+{
+public:
+    Formula(const std::string& formula_x, const std::string& formula_y)
+    {
+        symbol_table_.add_variable("x", x_);
+        symbol_table_.add_variable("y", y_);
+        symbol_table_.add_variable("t", t_);
+        symbol_table_.add_constants();
+
+        expression_x_.register_symbol_table(symbol_table_);
+
+        exprtk::parser<Compute::ScalarType> parser;
+        if (!parser.compile(formula_x, expression_x_))
+        {
+            throw std::runtime_error("Formula failed: x");
+        }
+
+        expression_y_.register_symbol_table(symbol_table_);
+
+        if (!parser.compile(formula_y, expression_y_))
+        {
+            throw std::runtime_error("Formula failed: y");
+        }
+    }
+
+    void set_start_t(Compute::ScalarType start_t)
+    {
+        t_begin_ = start_t;
+    }
+
+    Compute::Point<2> operator()(Compute::Point<2> arg) const
+    {
+        std::lock_guard lock(mutex_);
+        Compute::ScalarType x = arg[0], y = arg[1];
+
+        for (t_ = t_begin_; t_ <= T_INTERVAL + t_begin_; t_ += DT)
+        {
+            auto get_derivatives = [&] (Compute::ScalarType cur_x, Compute::ScalarType cur_y)
+            {
+                x_ = cur_x;
+                y_ = cur_y;
+                return std::make_pair(expression_x_.value(), expression_y_.value());
+            };
+
+            auto [dx1, dy1] = get_derivatives(x, y);
+            auto [dx2, dy2] = get_derivatives(x + dx1 * DT / 2, y + dy1 * DT / 2);
+            auto [dx3, dy3] = get_derivatives(x + dx2 * DT / 2, y + dy2 * DT / 2);
+            auto [dx4, dy4] = get_derivatives(x + dx3 * DT, y + dy3);
+
+            x += (DT / 6) * (dx1 + dx2 * 2 + dx3 * 3 + dx4);
+            y += (DT / 6) * (dy1 + dy2 * 2 + dy3 * 3 + dy4);
+        }
+
+        return {x, y};
+    }
+
+private:
+    mutable Compute::ScalarType x_;
+    mutable Compute::ScalarType y_;
+    mutable Compute::ScalarType t_;
+    mutable std::mutex mutex_;
+    Compute::ScalarType t_begin_ = 0;
+    exprtk::symbol_table<Compute::ScalarType> symbol_table_;
+    exprtk::expression<Compute::ScalarType> expression_x_;
+    exprtk::expression<Compute::ScalarType> expression_y_;
+
+    static constexpr Compute::ScalarType DT = 0.0001;
+    static constexpr Compute::ScalarType T_INTERVAL = 1;
+};
+
+template<size_t DIM>
+void print(Compute::Point<DIM> a)
+{
+    for (auto v : a.coords)
+    {
+        std::cout << v << " ";
+    }
+    std::cout << std::endl;
+}
+
+export class GridServer : public grid::GridService::Service
+{
+    grpc::Status GetGrid2D(grpc::ServerContext* context, const grid::Grid2DRequest* request, grid::Grid2D* response) override
+    {
+        std::atomic_flag cancellation_flag;
+        cancellation_flag.clear();
+
+        auto cancellation_future = std::async(std::launch::async, [&]()
+        {
+            while (true)
+            {
+                if (context->IsCancelled() || cancellation_flag.test())
+                {
+                    cancellation_flag.test_and_set();
+                    break;
+                }
+                std::this_thread::yield();
+            }
+        });
+
+        try
+        {
+            Compute::Point<2> min{request->min().x(), request->min().y()};
+            Compute::Point<2> max{request->max().x(), request->max().y()};
+            Formula formula(request->formula_x(), request->formula_y());
+            Compute::BasisType basis_type = request->basis_type() == grid::BasisType::LINEAR ? Compute::BasisType::LINEAR : Compute::BasisType::QUADRATIC;
+            Compute::BuildType build_type = request->build_type() == grid::BuildType::PARALLEL ? Compute::BuildType::PARALLEL : Compute::BuildType::SEQUENTIAL;
+            std::vector<Compute::Point<2>> anchor_points;
+            anchor_points.reserve(request->anchor_points_size());
+            for (auto& anchor : request->anchor_points())
+            {
+                anchor_points.push_back({anchor.x(), anchor.y()});
+            }
+
+            Compute::AdaptiveSparseGrid result(formula, min, max, request->eps(), anchor_points, basis_type, build_type, std::ref(cancellation_flag));
+
+            for (int current_step = 1; current_step < request->step(); ++current_step)
+            {
+                formula.set_start_t(current_step);
+                result = result.make_next_iteration(formula, request->eps(), anchor_points, basis_type, build_type, std::ref(cancellation_flag));
+            }
+
+            result.to_pb_2D(response);
+            cancellation_flag.test_and_set();
+            cancellation_future.wait();
+            return grpc::Status::OK;
+        } catch (const std::runtime_error& e)
+        {
+            cancellation_flag.test_and_set();
+            cancellation_future.wait();
+            return {grpc::StatusCode::INVALID_ARGUMENT, e.what()};
+        }
+
+    }
+};
