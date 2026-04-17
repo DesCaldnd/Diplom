@@ -83,6 +83,7 @@ export namespace std
     {
         using std::this_thread::yield;
     }
+    using std::swap;
 }
 
 export {

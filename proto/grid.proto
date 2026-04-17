@@ -17,6 +17,11 @@ enum BuildType {
     PARALLEL = 1;
 }
 
+enum FormulaType {
+    SIMPLE = 0;
+    DIFFUR = 1;
+}
+
 message Grid2DRequest {
     string formula_x = 1;
     string formula_y = 2;
@@ -26,13 +31,14 @@ message Grid2DRequest {
     BuildType build_type = 6;
     BasisType basis_type = 7;
     repeated Point2D anchor_points = 8;
-    optional int32 step = 9;
+    optional uint32 step = 9;
+    FormulaType formula_type = 10;
 }
 
 message Grid2D {
     message Index2D {
-        int32 x = 1;
-        int32 y = 2;
+        uint64 x = 1;
+        uint64 y = 2;
     }
     message GridKey2D {
         Index2D index = 1;
@@ -44,13 +50,9 @@ message Grid2D {
         Point2D alpha = 3;
         bool has_children = 4;
     }
-    message EntryPoint2D {
-        Node2D node = 1;
-        int32 dimension = 2;
-    }
 
     repeated Node2D nodes = 1;
-    repeated EntryPoint2D entry_points = 2;
+    repeated Node2D entry_points = 2;
     Point2D min = 3;
     Point2D max = 4;
     BasisType basis_type = 5;

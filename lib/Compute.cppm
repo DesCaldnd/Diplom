@@ -70,6 +70,7 @@ export namespace Compute
                            std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) : min_(min),
             max_(max), basis_type_(basis_type)
         {
+            check_constraints();
             entry_points_.reserve(pow_3(IN_DIM));
             build(func, epsilon, calculate_original_function_at_points(func, anchor_points), build_type,
                   cancellation_flag);
@@ -98,61 +99,59 @@ export namespace Compute
         {
             grid->set_basis_type(
                 basis_type_ == BasisType::LINEAR ? grid::BasisType::LINEAR : grid::BasisType::QUADRATIC);
-            auto min = new grid::Point2D();
+            auto min = grid->mutable_min();
             min->set_x(min_[0]);
             min->set_y(min_[1]);
-            grid->set_allocated_min(min);
-            auto max = new grid::Point2D();
+            auto max = grid->mutable_max();
             max->set_x(max_[0]);
             max->set_y(max_[1]);
-            grid->set_allocated_max(max);
 
-            for (auto &[key, node]: nodes_)
+            for (auto &[_, node]: nodes_)
             {
-                auto pb_node = grid::Grid2D::Node2D();
-                node_to_pb(node, &pb_node);
-                grid->mutable_nodes()->Add(std::move(pb_node));
+
+                auto pb_node = grid->add_nodes();
+                node_to_pb(node, pb_node);
             }
 
             for (auto &entry: entry_points_)
             {
-                auto pb_entry = grid::Grid2D::EntryPoint2D();
-                auto pb_node = new grid::Grid2D::Node2D();
+                auto pb_node = grid->add_entry_points();
                 node_to_pb(entry.node, pb_node);
-
-                pb_entry.set_allocated_node(pb_node);
-                pb_entry.set_dimension(entry.dimensions);
-
-                grid->mutable_entry_points()->Add(std::move(pb_entry));
             }
+            std::cout << grid->ByteSizeLong() << std::endl;
         }
 
     private:
         static void node_to_pb(const Node &node, grid::Grid2D::Node2D *to)
         {
             to->set_has_children(node.has_children);
-            auto alpha = new grid::Point2D();
+            auto alpha = to->mutable_alpha();
             alpha->set_x(node.alpha[0]);
             alpha->set_y(node.alpha[1]);
-            to->set_allocated_alpha(alpha);
 
-            auto center = new grid::Point2D();
+            auto center = to->mutable_center_unit();
             center->set_x(node.center_unit[0]);
             center->set_y(node.center_unit[1]);
-            to->set_allocated_center_unit(center);
 
-            auto grid_key = new grid::Grid2D::GridKey2D();
-            auto level = new grid::Grid2D::Index2D();
+            auto grid_key = to->mutable_key();
+            auto level = grid_key->mutable_level();
             level->set_x(node.key.level[0]);
             level->set_y(node.key.level[1]);
-            grid_key->set_allocated_level(level);
 
-            auto index = new grid::Grid2D::Index2D();
+            auto index = grid_key->mutable_index();
             index->set_x(node.key.index[0]);
             index->set_y(node.key.index[1]);
-            grid_key->set_allocated_index(index);
+        }
 
-            to->set_allocated_key(grid_key);
+        void check_constraints()
+        {
+            for (size_t i = 0; i < IN_DIM; ++i)
+            {
+                if (max_[i] <= min_[i])
+                {
+                    std::swap(min_[i], max_[i]);
+                }
+            }
         }
 
         Point to_real(const Point &unit) const
@@ -186,7 +185,7 @@ export namespace Compute
         {
             for (size_t i = 0; i < IN_DIM; ++i)
             {
-                if (real[i] < min_[i] || real[i] > max_[i])
+                if (real[i] < min_[i] - std::numeric_limits<ScalarType>::epsilon() || real[i] > max_[i] + std::numeric_limits<ScalarType>::epsilon())
                     throw std::runtime_error("Evaluation point out of bounds");
             }
         }
