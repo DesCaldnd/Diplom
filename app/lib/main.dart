@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
+import 'package:fixnum/fixnum.dart';
 
 import 'package:app/src/grid.dart';
 import 'package:app/src/grpc_singleton.dart';
@@ -43,6 +45,8 @@ class _GridScreenState extends State<GridScreen> {
   final TextEditingController _maxYCtrl = TextEditingController();
   final TextEditingController _epsCtrl = TextEditingController();
   final TextEditingController _stepCtrl = TextEditingController(text: '1');
+  final TextEditingController _mLevelCtrl = TextEditingController(text: '0');
+  final TextEditingController _mNodeDimCtrl = TextEditingController(text: '0');
 
   pb.BasisType _basisType = pb.BasisType.QUADRATIC;
   pb.FormulaType _formulaType = pb.FormulaType.DIFFUR;
@@ -65,6 +69,8 @@ class _GridScreenState extends State<GridScreen> {
     _maxYCtrl.dispose();
     _epsCtrl.dispose();
     _stepCtrl.dispose();
+    _mLevelCtrl.dispose();
+    _mNodeDimCtrl.dispose();
     super.dispose();
   }
 
@@ -76,7 +82,9 @@ class _GridScreenState extends State<GridScreen> {
         _minYCtrl.text.isEmpty ||
         _maxYCtrl.text.isEmpty ||
         _epsCtrl.text.isEmpty ||
-        _stepCtrl.text.isEmpty) {
+        _stepCtrl.text.isEmpty ||
+        _mLevelCtrl.text.isEmpty ||
+        _mNodeDimCtrl.text.isEmpty) {
       _showError("All fields must be filled.");
       return;
     }
@@ -86,14 +94,18 @@ class _GridScreenState extends State<GridScreen> {
     final minY = double.tryParse(_minYCtrl.text);
     final maxY = double.tryParse(_maxYCtrl.text);
     final eps = double.tryParse(_epsCtrl.text);
-    final step = int.tryParse(_stepCtrl.text);
+    final step = double.tryParse(_stepCtrl.text);
+    final mLevel = int.tryParse(_mLevelCtrl.text);
+    final mNodeDim = Int64.tryParseInt(_mNodeDimCtrl.text);
 
     if (minX == null ||
         maxX == null ||
         minY == null ||
         maxY == null ||
         eps == null ||
-        step == null) {
+        step == null ||
+        mLevel == null ||
+        mNodeDim == null) {
       _showError("Invalid numeric values.");
       return;
     }
@@ -113,6 +125,8 @@ class _GridScreenState extends State<GridScreen> {
         basisType: _basisType,
         step: step,
         formulaType: _formulaType,
+        maxLevel: mLevel,
+        maxNodesInDim: mNodeDim,
       );
 
       final response = await ComputeService().gridClient.getGrid2D(
@@ -142,15 +156,16 @@ class _GridScreenState extends State<GridScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label,
-      {String? hint, bool isNumeric = true}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label, {
+    String? hint,
+    bool isNumeric = true,
+  }) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
@@ -187,15 +202,16 @@ class _GridScreenState extends State<GridScreen> {
                   ),
                   child: ClipRect(
                     child: CustomPaint(
-                      painter: _resultGrid != null
-                          ? GridPainter(
-                        grid: _resultGrid!,
-                        minX: _origMinX,
-                        maxX: _origMaxX,
-                        minY: _origMinY,
-                        maxY: _origMaxY,
-                      )
-                          : null,
+                      painter:
+                          _resultGrid != null
+                              ? GridPainter(
+                                grid: _resultGrid!,
+                                minX: _origMinX,
+                                maxX: _origMaxX,
+                                minY: _origMinY,
+                                maxY: _origMaxY,
+                              )
+                              : null,
                     ),
                   ),
                 ),
@@ -208,10 +224,24 @@ class _GridScreenState extends State<GridScreen> {
                     children: [
                       Row(
                         children: [
-                          _buildTextField(_formXCtrl, 'Formula X',
-                              hint: _formulaType == pb.FormulaType.DIFFUR ? 'dx(t)/dt=f1(x, y, t)' : 'x=f1(x, y)', isNumeric: false),
-                          _buildTextField(_formYCtrl, 'Formula Y',
-                              hint: _formulaType == pb.FormulaType.DIFFUR ? 'dy(t)/dt=f2(x, y, t)' : 'y=f2(x, y)', isNumeric: false),
+                          _buildTextField(
+                            _formXCtrl,
+                            'Formula X',
+                            hint:
+                                _formulaType == pb.FormulaType.DIFFUR
+                                    ? 'dx(t)/dt=f1(x, y, t)'
+                                    : 'x=f1(x, y)',
+                            isNumeric: false,
+                          ),
+                          _buildTextField(
+                            _formYCtrl,
+                            'Formula Y',
+                            hint:
+                                _formulaType == pb.FormulaType.DIFFUR
+                                    ? 'dy(t)/dt=f2(x, y, t)'
+                                    : 'y=f2(x, y)',
+                            isNumeric: false,
+                          ),
                         ],
                       ),
                       Row(
@@ -226,20 +256,34 @@ class _GridScreenState extends State<GridScreen> {
                         children: [
                           _buildTextField(_epsCtrl, 'Epsilon'),
                           _buildTextField(_stepCtrl, 'Step'),
+                          _buildTextField(_mLevelCtrl, 'Max node level'),
+                          _buildTextField(
+                            _mNodeDimCtrl,
+                            'Max nodes in dimension',
+                          ),
                         ],
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      Wrap(
+                        alignment: WrapAlignment.spaceEvenly,
+                        // Выравнивание как в Row
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        // Центрирование по вертикали
+                        spacing: 16.0,
+                        // Расстояние между элементами по горизонтали
+                        runSpacing: 16.0,
+                        // Расстояние между строками (если произойдет перенос)
                         children: [
                           DropdownButton<pb.BasisType>(
                             value: _basisType,
                             items: const [
                               DropdownMenuItem(
-                                  value: pb.BasisType.LINEAR,
-                                  child: Text('Linear')),
+                                value: pb.BasisType.LINEAR,
+                                child: Text('Linear'),
+                              ),
                               DropdownMenuItem(
-                                  value: pb.BasisType.QUADRATIC,
-                                  child: Text('Quadratic')),
+                                value: pb.BasisType.QUADRATIC,
+                                child: Text('Quadratic'),
+                              ),
                             ],
                             onChanged: (val) {
                               if (val != null) setState(() => _basisType = val);
@@ -249,25 +293,30 @@ class _GridScreenState extends State<GridScreen> {
                             value: _formulaType,
                             items: const [
                               DropdownMenuItem(
-                                  value: pb.FormulaType.SIMPLE,
-                                  child: Text('Simple')),
+                                value: pb.FormulaType.SIMPLE,
+                                child: Text('Simple'),
+                              ),
                               DropdownMenuItem(
-                                  value: pb.FormulaType.DIFFUR,
-                                  child: Text('Differential')),
+                                value: pb.FormulaType.DIFFUR,
+                                child: Text('Differential'),
+                              ),
                             ],
                             onChanged: (val) {
-                              if (val != null) setState(() => _formulaType = val);
+                              if (val != null)
+                                setState(() => _formulaType = val);
                             },
                           ),
                           DropdownButton<pb.BuildType>(
                             value: _buildType,
                             items: const [
                               DropdownMenuItem(
-                                  value: pb.BuildType.SEQUENTIAL,
-                                  child: Text('Sequential')),
+                                value: pb.BuildType.SEQUENTIAL,
+                                child: Text('Sequential'),
+                              ),
                               DropdownMenuItem(
-                                  value: pb.BuildType.PARALLEL,
-                                  child: Text('Parallel')),
+                                value: pb.BuildType.PARALLEL,
+                                child: Text('Parallel'),
+                              ),
                             ],
                             onChanged: (val) {
                               if (val != null) setState(() => _buildType = val);
@@ -277,7 +326,9 @@ class _GridScreenState extends State<GridScreen> {
                             onPressed: _isLoading ? null : _calculate,
                             child: const Padding(
                               padding: EdgeInsets.symmetric(
-                                  horizontal: 24.0, vertical: 12.0),
+                                horizontal: 24.0,
+                                vertical: 12.0,
+                              ),
                               child: Text('Calculate'),
                             ),
                           ),
@@ -292,9 +343,7 @@ class _GridScreenState extends State<GridScreen> {
           if (_isLoading)
             Container(
               color: Colors.black54,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
         ],
       ),
@@ -322,9 +371,11 @@ class GridPainter extends CustomPainter {
     if (size.width <= 0 || size.height <= 0) return;
 
     const int segments = 100;
-    List<List<Point2D>> mappedPoints = List.generate(
-      segments + 1,
-          (_) => List.generate(segments + 1, (_) => Point2D(0.0, 0.0)),
+    final int numVertices = (segments + 1) * (segments + 1);
+
+    List<Point2D> pOutList = List.generate(
+      numVertices,
+      (_) => Point2D(0.0, 0.0),
     );
 
     double boundMinTx = double.infinity;
@@ -332,8 +383,8 @@ class GridPainter extends CustomPainter {
     double boundMinTy = double.infinity;
     double boundMaxTy = double.negativeInfinity;
 
-    for (int i = 0; i <= segments; i++) {
-      for (int j = 0; j <= segments; j++) {
+    for (int j = 0; j <= segments; j++) {
+      for (int i = 0; i <= segments; i++) {
         double u = i / segments;
         double v = j / segments;
 
@@ -343,7 +394,8 @@ class GridPainter extends CustomPainter {
         Point2D pIn = Point2D(origX, origY);
         Point2D pOut = grid.evaluate(pIn);
 
-        mappedPoints[i][j] = pOut;
+        int idx = j * (segments + 1) + i;
+        pOutList[idx] = pOut;
 
         if (pOut.x < boundMinTx) boundMinTx = pOut.x;
         if (pOut.x > boundMaxTx) boundMaxTx = pOut.x;
@@ -377,42 +429,120 @@ class GridPainter extends CustomPainter {
       return Offset(sx, sy);
     }
 
-    final gridPaint = Paint()
-      ..color = Colors.grey.withOpacity(0.3)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
+    final gridPaint =
+        Paint()
+          ..color = Colors.grey.withOpacity(0.3)
+          ..strokeWidth = 1
+          ..style = PaintingStyle.stroke;
 
     for (int i = 0; i <= 10; i++) {
       double x = padding + (usableW / 10) * i;
       double y = padding + (usableH / 10) * i;
-      canvas.drawLine(Offset(x, padding), Offset(x, size.height - padding), gridPaint);
-      canvas.drawLine(Offset(padding, y), Offset(size.width - padding, y), gridPaint);
+      canvas.drawLine(
+        Offset(x, padding),
+        Offset(x, size.height - padding),
+        gridPaint,
+      );
+      canvas.drawLine(
+        Offset(padding, y),
+        Offset(size.width - padding, y),
+        gridPaint,
+      );
     }
 
-    for (int i = 0; i < segments; i++) {
-      for (int j = 0; j < segments; j++) {
-        Offset p1 = toScreen(mappedPoints[i][j]);
-        Offset p2 = toScreen(mappedPoints[i + 1][j]);
-        Offset p3 = toScreen(mappedPoints[i + 1][j + 1]);
-        Offset p4 = toScreen(mappedPoints[i][j + 1]);
+    List<Offset> positions = List.filled(numVertices, Offset.zero);
+    List<Color> colors = List.filled(numVertices, Colors.transparent);
+    List<int> indices = List.filled(segments * segments * 6, 0);
 
+    for (int j = 0; j <= segments; j++) {
+      for (int i = 0; i <= segments; i++) {
         double u = i / segments;
         double v = j / segments;
+        int idx = j * (segments + 1) + i;
+
+        positions[idx] = toScreen(pOutList[idx]);
 
         Color bottomColor = Color.lerp(Colors.cyan, Colors.green, u)!;
         Color topColor = Color.lerp(Colors.blue, Colors.red, u)!;
-        Color cellColor = Color.lerp(bottomColor, topColor, v)!;
-
-        Path path = Path()
-          ..moveTo(p1.dx, p1.dy)
-          ..lineTo(p2.dx, p2.dy)
-          ..lineTo(p3.dx, p3.dy)
-          ..lineTo(p4.dx, p4.dy)
-          ..close();
-
-        canvas.drawPath(path, Paint()..color = cellColor..style = PaintingStyle.fill);
+        colors[idx] = Color.lerp(bottomColor, topColor, v)!;
       }
     }
+
+    int indexOffset = 0;
+    for (int j = 0; j < segments; j++) {
+      for (int i = 0; i < segments; i++) {
+        int bottomLeft = j * (segments + 1) + i;
+        int bottomRight = bottomLeft + 1;
+        int topLeft = (j + 1) * (segments + 1) + i;
+        int topRight = topLeft + 1;
+
+        indices[indexOffset++] = bottomLeft;
+        indices[indexOffset++] = topLeft;
+        indices[indexOffset++] = topRight;
+
+        indices[indexOffset++] = bottomLeft;
+        indices[indexOffset++] = topRight;
+        indices[indexOffset++] = bottomRight;
+      }
+    }
+
+    final vertices = ui.Vertices(
+      ui.VertexMode.triangles,
+      positions,
+      colors: colors,
+      indices: indices,
+    );
+
+    canvas.drawVertices(vertices, ui.BlendMode.dst, Paint());
+
+    String getCoord(double sx, double sy) {
+      double tx = (sx - offsetX) / scale + boundMinTx;
+      double ty = (size.height - sy - offsetY) / scale + boundMinTy;
+      return '(${tx.toStringAsFixed(2)}, ${ty.toStringAsFixed(2)})';
+    }
+
+    void drawCornerText(String text, Offset pos, bool isLeft, bool isTop) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      double dx = isLeft ? pos.dx + 5 : pos.dx - textPainter.width - 5;
+      double dy = isTop ? pos.dy + 5 : pos.dy - textPainter.height - 5;
+      textPainter.paint(canvas, Offset(dx, dy));
+    }
+
+    drawCornerText(
+      getCoord(padding, padding),
+      Offset(padding, padding),
+      true,
+      true,
+    );
+    drawCornerText(
+      getCoord(size.width - padding, padding),
+      Offset(size.width - padding, padding),
+      false,
+      true,
+    );
+    drawCornerText(
+      getCoord(padding, size.height - padding),
+      Offset(padding, size.height - padding),
+      true,
+      false,
+    );
+    drawCornerText(
+      getCoord(size.width - padding, size.height - padding),
+      Offset(size.width - padding, size.height - padding),
+      false,
+      false,
+    );
   }
 
   @override
@@ -424,4 +554,3 @@ class GridPainter extends CustomPainter {
         oldDelegate.maxY != maxY;
   }
 }
-

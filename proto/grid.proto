@@ -31,8 +31,10 @@ message Grid2DRequest {
     BuildType build_type = 6;
     BasisType basis_type = 7;
     repeated Point2D anchor_points = 8;
-    optional uint32 step = 9;
+    optional double step = 9;
     FormulaType formula_type = 10;
+    int32 max_level = 11;
+    int64 max_nodes_in_dim = 12;
 }
 
 message Grid2D {

@@ -10,7 +10,7 @@ class ComputeService {
   static ComputeService? _service;
 
   ComputeService._internal() : channel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
-      host: "localhost",
+      host: "192.168.1.8",
       grpcPort: 9999,
       grpcTransportSecure: false,
       grpcWebPort: 8082,

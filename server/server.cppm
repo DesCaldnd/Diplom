@@ -39,9 +39,10 @@ public:
         }
     }
 
-    void set_start_t(Compute::ScalarType start_t)
+    void set_diapason(Compute::ScalarType start_t, Compute::ScalarType end_t)
     {
         t_begin_ = start_t;
+        t_end_ = end_t;
     }
 
     Compute::Point<2> operator()(Compute::Point<2> arg) const
@@ -51,7 +52,7 @@ public:
 
         if (is_diffur_)
         {
-            for (t_ = t_begin_; t_ <= T_INTERVAL + t_begin_; t_ += dt_)
+            for (t_ = t_begin_; t_ <= t_end_; t_ += dt_)
             {
                 auto get_derivatives = [&] (Compute::ScalarType cur_x, Compute::ScalarType cur_y)
                 {
@@ -86,6 +87,7 @@ private:
     mutable std::mutex mutex_;
     bool is_diffur_;
     Compute::ScalarType t_begin_ = 0;
+    Compute::ScalarType t_end_ = 1;
     Compute::ScalarType dt_;
     exprtk::symbol_table<Compute::ScalarType> symbol_table_;
     exprtk::expression<Compute::ScalarType> expression_x_;
@@ -119,6 +121,7 @@ export class GridServer : public grid::GridService::Service
             Compute::Point<2> min{request->min().x(), request->min().y()};
             Compute::Point<2> max{request->max().x(), request->max().y()};
             Formula formula(request->formula_x(), request->formula_y(), request->eps(), request->formula_type() == grid::FormulaType::DIFFUR);
+            formula.set_diapason(0, std::min(1.0, request->step()));
             Compute::BasisType basis_type = request->basis_type() == grid::BasisType::LINEAR ? Compute::BasisType::LINEAR : Compute::BasisType::QUADRATIC;
             Compute::BuildType build_type = request->build_type() == grid::BuildType::PARALLEL ? Compute::BuildType::PARALLEL : Compute::BuildType::SEQUENTIAL;
             std::vector<Compute::Point<2>> anchor_points;
@@ -128,17 +131,19 @@ export class GridServer : public grid::GridService::Service
                 anchor_points.push_back({anchor.x(), anchor.y()});
             }
 
-            Compute::AdaptiveSparseGrid result(formula, min, max, request->eps(), anchor_points, basis_type, build_type, std::ref(cancellation_flag));
+            Compute::AdaptiveSparseGrid result(formula, min, max, request->eps(), anchor_points, basis_type, build_type, request->max_level(), request->max_nodes_in_dim(), std::ref(cancellation_flag));
 
-            for (int current_step = 1; current_step < request->step(); ++current_step)
+            for (Compute::ScalarType current_step = 1; current_step < request->step(); ++current_step)
             {
-                formula.set_start_t(current_step);
-                result = result.make_next_iteration(formula, request->eps(), anchor_points, basis_type, build_type, std::ref(cancellation_flag));
+                formula.set_diapason(current_step, std::min(current_step + 1, request->step()));
+                result = result.make_next_iteration(formula, request->eps(), anchor_points, basis_type, build_type, request->max_level(), request->max_nodes_in_dim(), std::ref(cancellation_flag));
             }
 
             result.to_pb_2D(response);
             cancellation_flag.test_and_set();
             cancellation_future.wait();
+
+            std::cout << "Message size in mb: " << response->ByteSizeLong() / 1024.0 / 1024.0 << std::endl;
             return grpc::Status::OK;
         } catch (const std::runtime_error& e)
         {

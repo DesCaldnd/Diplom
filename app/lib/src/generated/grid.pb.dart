@@ -96,8 +96,10 @@ class Grid2DRequest extends $pb.GeneratedMessage {
     BuildType? buildType,
     BasisType? basisType,
     $core.Iterable<Point2D>? anchorPoints,
-    $core.int? step,
+    $core.double? step,
     FormulaType? formulaType,
+    $core.int? maxLevel,
+    $fixnum.Int64? maxNodesInDim,
   }) {
     final result = create();
     if (formulaX != null) result.formulaX = formulaX;
@@ -110,6 +112,8 @@ class Grid2DRequest extends $pb.GeneratedMessage {
     if (anchorPoints != null) result.anchorPoints.addAll(anchorPoints);
     if (step != null) result.step = step;
     if (formulaType != null) result.formulaType = formulaType;
+    if (maxLevel != null) result.maxLevel = maxLevel;
+    if (maxNodesInDim != null) result.maxNodesInDim = maxNodesInDim;
     return result;
   }
 
@@ -137,9 +141,11 @@ class Grid2DRequest extends $pb.GeneratedMessage {
         enumValues: BasisType.values)
     ..pPM<Point2D>(8, _omitFieldNames ? '' : 'anchorPoints',
         subBuilder: Point2D.create)
-    ..aI(9, _omitFieldNames ? '' : 'step', fieldType: $pb.PbFieldType.OU3)
+    ..aD(9, _omitFieldNames ? '' : 'step')
     ..aE<FormulaType>(10, _omitFieldNames ? '' : 'formulaType',
         enumValues: FormulaType.values)
+    ..aI(11, _omitFieldNames ? '' : 'maxLevel')
+    ..aInt64(12, _omitFieldNames ? '' : 'maxNodesInDim')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -232,9 +238,9 @@ class Grid2DRequest extends $pb.GeneratedMessage {
   $pb.PbList<Point2D> get anchorPoints => $_getList(7);
 
   @$pb.TagNumber(9)
-  $core.int get step => $_getIZ(8);
+  $core.double get step => $_getN(8);
   @$pb.TagNumber(9)
-  set step($core.int value) => $_setUnsignedInt32(8, value);
+  set step($core.double value) => $_setDouble(8, value);
   @$pb.TagNumber(9)
   $core.bool hasStep() => $_has(8);
   @$pb.TagNumber(9)
@@ -248,6 +254,24 @@ class Grid2DRequest extends $pb.GeneratedMessage {
   $core.bool hasFormulaType() => $_has(9);
   @$pb.TagNumber(10)
   void clearFormulaType() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.int get maxLevel => $_getIZ(10);
+  @$pb.TagNumber(11)
+  set maxLevel($core.int value) => $_setSignedInt32(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasMaxLevel() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearMaxLevel() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $fixnum.Int64 get maxNodesInDim => $_getI64(11);
+  @$pb.TagNumber(12)
+  set maxNodesInDim($fixnum.Int64 value) => $_setInt64(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasMaxNodesInDim() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearMaxNodesInDim() => $_clearField(12);
 }
 
 class Grid2D_Index2D extends $pb.GeneratedMessage {

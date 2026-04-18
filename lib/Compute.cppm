@@ -1,7 +1,6 @@
 //
 // Created by ivanl on 01.03.2026.
 //
-// асинхронка
 module;
 
 #include <proto/grid.pb.h>
@@ -67,12 +66,14 @@ export namespace Compute
         AdaptiveSparseGrid(const FUNC &func, Point min, Point max, ScalarType epsilon,
                            const std::vector<Argument> &anchor_points = {},
                            BasisType basis_type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL,
+                           size_t max_level = 0, size_t max_nodes_in_grid = 0,
                            std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) : min_(min),
             max_(max), basis_type_(basis_type)
         {
             check_constraints();
             entry_points_.reserve(pow_3(IN_DIM));
-            build(func, epsilon, calculate_original_function_at_points(func, anchor_points), build_type,
+            build(func, epsilon, calculate_original_function_at_points(func, anchor_points), build_type, max_level,
+                  max_nodes_in_grid,
                   cancellation_flag);
         }
 
@@ -86,13 +87,15 @@ export namespace Compute
         AdaptiveSparseGrid make_next_iteration(const FUNC &func, ScalarType epsilon,
                                                std::optional<std::vector<Argument> > anchor_points = {},
                                                std::optional<BasisType> basis_type = {},
-                                               std::optional<BuildType> build_type = {},
+                                               std::optional<BuildType> build_type = {}, size_t max_level = 0,
+                                               size_t max_nodes_in_grid = 0,
                                                std::optional<std::reference_wrapper<std::atomic_flag> >
                                                cancellation_flag = {})
         {
             return AdaptiveSparseGrid(NextIterationWrapper<FUNC>(func, *this), min_, max_, epsilon,
                                       anchor_points.value_or(std::vector<Argument>{}), basis_type.value_or(basis_type_),
-                                      build_type.value_or(BuildType::PARALLEL), cancellation_flag);
+                                      build_type.value_or(BuildType::PARALLEL), max_level, max_nodes_in_grid,
+                                      cancellation_flag);
         }
 
         void to_pb_2D(grid::Grid2D *grid)
@@ -108,7 +111,6 @@ export namespace Compute
 
             for (auto &[_, node]: nodes_)
             {
-
                 auto pb_node = grid->add_nodes();
                 node_to_pb(node, pb_node);
             }
@@ -118,7 +120,6 @@ export namespace Compute
                 auto pb_node = grid->add_entry_points();
                 node_to_pb(entry.node, pb_node);
             }
-            std::cout << grid->ByteSizeLong() << std::endl;
         }
 
     private:
@@ -147,7 +148,11 @@ export namespace Compute
         {
             for (size_t i = 0; i < IN_DIM; ++i)
             {
-                if (max_[i] <= min_[i])
+                if (std::abs(max_[i] - min_[i]) < std::numeric_limits<ScalarType>::epsilon())
+                {
+                    throw std::runtime_error(
+                        std::format("Invalid bounds at dimension {}, {} ~ {}", i, min_[i], max_[i]));
+                } else if (max_[i] < min_[i])
                 {
                     std::swap(min_[i], max_[i]);
                 }
@@ -185,8 +190,9 @@ export namespace Compute
         {
             for (size_t i = 0; i < IN_DIM; ++i)
             {
-                if (real[i] < min_[i] - std::numeric_limits<ScalarType>::epsilon() || real[i] > max_[i] + std::numeric_limits<ScalarType>::epsilon())
-                    throw std::runtime_error("Evaluation point out of bounds");
+                if (real[i] < min_[i] - std::numeric_limits<ScalarType>::epsilon() || real[i] > max_[i] +
+                    std::numeric_limits<ScalarType>::epsilon())
+                    throw std::runtime_error(std::format("Evaluation point out of bounds at dimension {}", i));
             }
         }
 
@@ -210,7 +216,8 @@ export namespace Compute
 
         template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
         void build(const FUNC &func, ScalarType epsilon, const std::vector<std::pair<Argument, Answer> > &anchors,
-                   BuildType build_type, std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag)
+                   BuildType build_type, size_t max_level, size_t max_nodes_in_grid,
+                   std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag)
         {
             const auto launch_type = build_type == BuildType::PARALLEL ? std::launch::async : std::launch::deferred;
             for (size_t i = 0; i <= IN_DIM; ++i)
@@ -235,8 +242,9 @@ export namespace Compute
                         expand_indicies(key, j);
                         NodeMap tmp;
                         Node node = tmp[create_node(func, key, {}, i, tmp).value()];
-                        futures.emplace_back(std::async(launch_type, &AdaptiveSparseGrid::template build_grid<FUNC>,
+                        futures.emplace_back(std::async(launch_type, &AdaptiveSparseGrid::build_grid<FUNC>,
                                                         this, std::ref(func), epsilon, std::ref(anchors), node, i,
+                                                        max_level, max_nodes_in_grid,
                                                         cancellation_flag));
                     }
                 } while (std::ranges::next_permutation(key.level.coords).found);
@@ -276,19 +284,22 @@ export namespace Compute
         template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
         std::pair<Node, NodeMap> build_grid(const FUNC &func, ScalarType epsilon,
                                             const std::vector<std::pair<Argument, Answer> > &anchors, Node entry_point,
-                                            size_t dimension,
+                                            size_t dimension, size_t max_level, size_t max_nodes_in_grid,
                                             std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag)
         {
             std::queue<GridKey> node_queue;
             node_queue.push(entry_point.key);
             NodeMap new_nodes;
             auto &ref_node = new_nodes.emplace(entry_point.key, entry_point).first->second;
+            size_t current_max_level = entry_point.key.level.max();
 
             while (!node_queue.empty())
             {
                 if (cancellation_flag.has_value() && cancellation_flag.value().get().test())
                 {
-                    throw std::runtime_error("Cancelled by flag");
+                    auto str = std::format("Interrupted at node count: {}, dimension: {}, max level: {}", new_nodes.size(), dimension, current_max_level);
+                    std::cerr << str << std::endl;
+                    throw std::runtime_error(str);
                 }
 
                 Node &node = new_nodes[node_queue.front()];
@@ -327,12 +338,17 @@ export namespace Compute
 
                 for (size_t i = 0; i < IN_DIM; ++i)
                 {
-                    if (node.key.level[i] == 0)
+                    if (node.key.level[i] == 0 || (max_level > 0 && node.key.level[i] >= max_level))
                         continue;
 
                     GridKey key_left = node.key, key_right = node.key;
 
                     key_left.level[i] = key_right.level[i] = node.key.level[i] + 1;
+
+                    if (key_left.level[i] > current_max_level)
+                    {
+                        current_max_level = key_left.level[i];
+                    }
 
                     key_left.index[i] = 2 * node.key.index[i] - 1;
                     key_right.index[i] = 2 * node.key.index[i] + 1;
@@ -355,6 +371,11 @@ export namespace Compute
                             node_queue.push(right_node.value());
                         }
                     }
+                }
+
+                if (max_nodes_in_grid > 0 && new_nodes.size() >= max_nodes_in_grid)
+                {
+                    break;
                 }
             }
 
@@ -465,7 +486,7 @@ export namespace Compute
     template<size_t IN_DIM, typename FUNC>
     AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon,
                        const std::vector<Point<IN_DIM> > &anchor_points = {}, BasisType type = BasisType::QUADRATIC,
-                       BuildType build_type = BuildType::PARALLEL,
+                       BuildType build_type = BuildType::PARALLEL, size_t max_level = 0, size_t max_nodes_in_dim = 0,
                        std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) ->
         AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
@@ -473,20 +494,21 @@ export namespace Compute
     AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, std::array<ScalarType, IN_DIM> max,
                        ScalarType epsilon, const std::vector<Point<IN_DIM> > &anchor_points = {},
                        BasisType type = BasisType::QUADRATIC, BuildType build_type = BuildType::PARALLEL,
+                       size_t max_level = 0, size_t max_nodes_in_dim = 0,
                        std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) ->
         AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
     template<size_t IN_DIM, typename FUNC>
     AdaptiveSparseGrid(FUNC func, Point<IN_DIM> min, std::array<ScalarType, IN_DIM> max, ScalarType epsilon,
                        const std::vector<Point<IN_DIM> > &anchor_points = {}, BasisType type = BasisType::QUADRATIC,
-                       BuildType build_type = BuildType::PARALLEL,
+                       BuildType build_type = BuildType::PARALLEL, size_t max_level = 0, size_t max_nodes_in_dim = 0,
                        std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) ->
         AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 
     template<size_t IN_DIM, typename FUNC>
     AdaptiveSparseGrid(FUNC func, std::array<ScalarType, IN_DIM> min, Point<IN_DIM> max, ScalarType epsilon,
                        const std::vector<Point<IN_DIM> > &anchor_points = {}, BasisType type = BasisType::QUADRATIC,
-                       BuildType build_type = BuildType::PARALLEL,
+                       BuildType build_type = BuildType::PARALLEL, size_t max_level = 0, size_t max_nodes_in_dim = 0,
                        std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag = {}) ->
         AdaptiveSparseGrid<IN_DIM, function_traits::Analyzer<FUNC>::OUT>;
 }

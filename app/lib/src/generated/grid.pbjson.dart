@@ -100,7 +100,7 @@ const Grid2DRequest$json = {
       '6': '.grid.Point2D',
       '10': 'anchorPoints'
     },
-    {'1': 'step', '3': 9, '4': 1, '5': 13, '9': 0, '10': 'step', '17': true},
+    {'1': 'step', '3': 9, '4': 1, '5': 1, '9': 0, '10': 'step', '17': true},
     {
       '1': 'formula_type',
       '3': 10,
@@ -109,6 +109,8 @@ const Grid2DRequest$json = {
       '6': '.grid.FormulaType',
       '10': 'formulaType'
     },
+    {'1': 'max_level', '3': 11, '4': 1, '5': 5, '10': 'maxLevel'},
+    {'1': 'max_nodes_in_dim', '3': 12, '4': 1, '5': 3, '10': 'maxNodesInDim'},
   ],
   '8': [
     {'1': '_step'},
@@ -122,9 +124,10 @@ final $typed_data.Uint8List grid2DRequestDescriptor = $convert.base64Decode(
     'YXgYBCABKAsyDS5ncmlkLlBvaW50MkRSA21heBIQCgNlcHMYBSABKAFSA2VwcxIuCgpidWlsZF'
     '90eXBlGAYgASgOMg8uZ3JpZC5CdWlsZFR5cGVSCWJ1aWxkVHlwZRIuCgpiYXNpc190eXBlGAcg'
     'ASgOMg8uZ3JpZC5CYXNpc1R5cGVSCWJhc2lzVHlwZRIyCg1hbmNob3JfcG9pbnRzGAggAygLMg'
-    '0uZ3JpZC5Qb2ludDJEUgxhbmNob3JQb2ludHMSFwoEc3RlcBgJIAEoDUgAUgRzdGVwiAEBEjQK'
-    'DGZvcm11bGFfdHlwZRgKIAEoDjIRLmdyaWQuRm9ybXVsYVR5cGVSC2Zvcm11bGFUeXBlQgcKBV'
-    '9zdGVw');
+    '0uZ3JpZC5Qb2ludDJEUgxhbmNob3JQb2ludHMSFwoEc3RlcBgJIAEoAUgAUgRzdGVwiAEBEjQK'
+    'DGZvcm11bGFfdHlwZRgKIAEoDjIRLmdyaWQuRm9ybXVsYVR5cGVSC2Zvcm11bGFUeXBlEhsKCW'
+    '1heF9sZXZlbBgLIAEoBVIIbWF4TGV2ZWwSJwoQbWF4X25vZGVzX2luX2RpbRgMIAEoA1INbWF4'
+    'Tm9kZXNJbkRpbUIHCgVfc3RlcA==');
 
 @$core.Deprecated('Use grid2DDescriptor instead')
 const Grid2D$json = {
