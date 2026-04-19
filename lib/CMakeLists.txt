@@ -31,7 +31,7 @@ add_library(compute)
 
 target_sources(compute
     PUBLIC
-        FILE_SET CXX_MODULES FILES compute.cppm
+        FILE_SET CXX_MODULES FILES Compute.cppm
 )
 
 target_link_libraries(compute util function_traits vector_value helper_types protolib)
