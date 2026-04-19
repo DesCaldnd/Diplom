@@ -151,7 +151,7 @@ export namespace Compute
                 if (std::abs(max_[i] - min_[i]) < std::numeric_limits<ScalarType>::epsilon())
                 {
                     throw std::runtime_error(
-                        std::format("Invalid bounds at dimension {}, {} ~ {}", i, min_[i], max_[i]));
+                        fmt::format("Invalid bounds at dimension {}, {} ~ {}", i, min_[i], max_[i]));
                 } else if (max_[i] < min_[i])
                 {
                     std::swap(min_[i], max_[i]);
@@ -179,11 +179,13 @@ export namespace Compute
         std::vector<std::pair<Argument, Answer> > calculate_original_function_at_points(
             const FUNC &func, const std::vector<Argument> &anchor_points)
         {
-            auto r = anchor_points | std::ranges::views::transform([&, this](const Argument &arg)
+            std::vector<std::pair<Argument, Answer> > result;
+            result.reserve(anchor_points.size());
+            for (auto&  arg : anchor_points)
             {
-                return std::pair{to_unit(arg), func(arg)};
-            });
-            return {r.begin(), r.end()};
+                result.emplace_back(to_unit(arg), func(arg));
+            }
+            return result;
         }
 
         void check_evaluation_point(const Argument &real) const
@@ -192,7 +194,7 @@ export namespace Compute
             {
                 if (real[i] < min_[i] - std::numeric_limits<ScalarType>::epsilon() || real[i] > max_[i] +
                     std::numeric_limits<ScalarType>::epsilon())
-                    throw std::runtime_error(std::format("Evaluation point out of bounds at dimension {}", i));
+                    throw std::runtime_error(fmt::format("Evaluation point out of bounds at dimension {}", i));
             }
         }
 
@@ -261,7 +263,10 @@ export namespace Compute
                     entry_point.dimensions = i;
                     entry_point.node = node;
                     entry_points_.push_back(entry_point);
-                    nodes_.insert_range(new_nodes);
+                    for (auto& kv : new_nodes)
+                    {
+                        nodes_.insert(kv);
+                    }
                 }
             }
         }
@@ -297,7 +302,7 @@ export namespace Compute
             {
                 if (cancellation_flag.has_value() && cancellation_flag.value().get().test())
                 {
-                    auto str = std::format("Interrupted at node count: {}, dimension: {}, max level: {}", new_nodes.size(), dimension, current_max_level);
+                    auto str = fmt::format("Interrupted at node count: {}, dimension: {}, max level: {}", new_nodes.size(), dimension, current_max_level);
                     std::cerr << str << std::endl;
                     throw std::runtime_error(str);
                 }

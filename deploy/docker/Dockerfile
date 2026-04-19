@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     wget curl git zip unzip tar pkg-config \
     software-properties-common lsb-release gnupg \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Установка CMake 3.28+

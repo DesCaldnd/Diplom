@@ -23,6 +23,7 @@ module;
 #include <future>
 #include <functional>
 #include <thread>
+#include <fmt/core.h>
 
 export module util;
 
@@ -54,15 +55,7 @@ export namespace std
     {
         using std::ranges::next_permutation;
         using std::ranges::next_permutation_result;
-        using std::ranges::operator|;
-        using std::ranges::transform;
-        using std::ranges::transform_view;
         using std::ranges::range;
-
-        namespace views 
-        {
-            using std::ranges::views::transform;
-        }
     }
     using std::queue;
     using std::remove_cvref_t;
@@ -84,7 +77,11 @@ export namespace std
         using std::this_thread::yield;
     }
     using std::swap;
-    using std::format;
+}
+
+export namespace fmt
+{
+    using fmt::format;
 }
 
 export {
