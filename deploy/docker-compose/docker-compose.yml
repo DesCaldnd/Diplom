@@ -22,7 +22,7 @@ services:
       - "9901:9901"
       - "8082:8082"
     networks:
-      - app-network
+      - app_network
     command: [ "-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy" ]
     depends_on:
       - grid_service
