@@ -38,6 +38,14 @@ class GridKey2D {
   GridKey2D.fromPB(grid.Grid2D_GridKey2D key) : index = Index2D.fromPB(key.index), level = Index2D.fromPB(key.level);
 }
 
+bool equal(GridKey2D a, GridKey2D b) {
+  return a.index.x == b.index.x && a.index.y == b.index.y && a.level.x == b.level.x && a.level.y == b.level.y;
+}
+
+int hash(GridKey2D key) {
+  return key.index.x.hashCode ^ (key.index.y.hashCode << 2) ^ (key.level.x.hashCode << 3) ^ (key.level.y.hashCode << 4);
+}
+
 class Node2D {
   GridKey2D key;
   Point2D centerUnit;
@@ -54,7 +62,7 @@ class Grid2D {
   Point2D max;
   BasisType basisType;
   List<Node2D> entryPoints = [];
-  HashMap<GridKey2D, Node2D> nodes = HashMap();
+  HashMap<GridKey2D, Node2D> nodes = HashMap(equals: equal, hashCode: hash);
 
   Grid2D(this.min, this.max, this.basisType, this.entryPoints, this.nodes);
   Grid2D.fromPB(grid.Grid2D grid2D) : min = Point2D.fromPB(grid2D.min), max = Point2D.fromPB(grid2D.max), basisType = grid2D.basisType == grid.BasisType.LINEAR ? BasisType.linear : BasisType.quadratic

@@ -370,7 +370,7 @@ class GridPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    const int segments = 100;
+    const int segments = 40;
     final int numVertices = (segments + 1) * (segments + 1);
 
     List<Point2D> pOutList = List.generate(
