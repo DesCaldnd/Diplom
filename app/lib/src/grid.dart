@@ -123,17 +123,19 @@ class Grid2D {
   List<Node2D> _getChildrenForArg(Point2D arg, Node2D node) {
     List<Node2D> children = [];
 
+    bool canHaveXChild = node.key.level.x > 0;
+    bool canHaveYChild = node.key.level.y > 0;
     GridKey2D xKey = GridKey2D(Index2D.copyWith(node.key.index), Index2D(node.key.level.x + 1, node.key.level.y));
     GridKey2D yKey = GridKey2D(Index2D.copyWith(node.key.index), Index2D(node.key.level.x, node.key.level.y + 1));
 
     xKey.index.x = Int64(2) * xKey.index.x + (arg.x < node.centerUnit.x ? Int64(-1) : Int64(1));
     yKey.index.y = Int64(2) * yKey.index.y + (arg.y < node.centerUnit.y ? Int64(-1) : Int64(1));
 
-    if (nodes.containsKey(xKey)) {
+    if (canHaveXChild && nodes.containsKey(xKey)) {
       children.add(nodes[xKey]!);
     }
 
-    if (nodes.containsKey(yKey)) {
+    if (canHaveYChild && nodes.containsKey(yKey)) {
       children.add(nodes[yKey]!);
     }
 
