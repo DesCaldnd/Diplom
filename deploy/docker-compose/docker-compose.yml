@@ -6,7 +6,7 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    container_name: grid_service
+    container_name: server
     ports:
       - "9999:9999"  # Открываем порт для прямого доступа к серверу (опционально)
     networks:
@@ -25,7 +25,7 @@ services:
       - app_network
     command: [ "-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy" ]
     depends_on:
-      - grid_service
+      - server
     restart: unless-stopped
 
 

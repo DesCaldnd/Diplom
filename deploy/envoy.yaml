@@ -48,7 +48,7 @@ static_resources:
                         - match:
                             prefix: "/grid.GridService"
                           route:
-                            cluster: grid_service
+                            cluster: server
                             timeout: 0s
                             max_stream_duration:
                               grpc_timeout_header_max: 0s
@@ -65,7 +65,7 @@ static_resources:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
   clusters:
-    - name: grid_service
+    - name: server
       connect_timeout: 1s
       type: STRICT_DNS
       typed_extension_protocol_options:
@@ -75,11 +75,11 @@ static_resources:
             http2_protocol_options: {}
       lb_policy: ROUND_ROBIN
       load_assignment:
-        cluster_name: grid_service
+        cluster_name: server
         endpoints:
           - lb_endpoints:
               - endpoint:
                   address:
                     socket_address:
-                      address: grid_service
+                      address: server
                       port_value: 9999
