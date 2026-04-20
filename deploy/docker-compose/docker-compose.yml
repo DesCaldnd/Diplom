@@ -17,7 +17,7 @@ services:
     image: envoyproxy/envoy:v1.33-latest
     container_name: envoy
     volumes:
-      - ./deploy/envoy.yaml:/etc/envoy/envoy.yaml
+      - ../envoy.yaml:/etc/envoy/envoy.yaml
     ports:
       - "9901:9901"
       - "8082:8082"
