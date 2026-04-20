@@ -6,11 +6,27 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    container_name: grpc_server
+    container_name: grid_service
     ports:
       - "9999:9999"  # Открываем порт для прямого доступа к серверу (опционально)
     networks:
       - app_network
+    restart: unless-stopped
+
+  envoy:
+    image: envoyproxy/envoy:v1.33-latest
+    container_name: envoy
+    volumes:
+      - ./Server/Envoy/${ENVOY_CONF:-envoy.yaml}:/etc/envoy/envoy.yaml
+      - /etc/letsencrypt/:/etc/envoy/certs:ro
+    ports:
+      - "9901:9901"
+      - "8082:8082"
+    networks:
+      - app-network
+    command: [ "-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy" ]
+    depends_on:
+      - grid_service
     restart: unless-stopped
 
 
