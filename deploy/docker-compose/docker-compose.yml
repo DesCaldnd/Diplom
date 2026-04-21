@@ -28,6 +28,17 @@ services:
       - server
     restart: unless-stopped
 
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.web
+    container_name: flutter_web
+    ports:
+      - "80:80"
+    networks:
+      - app_network
+    restart: unless-stopped
+
 
 # Определение сети для взаимодействия между сервисами
 networks:

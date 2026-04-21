@@ -1,6 +1,5 @@
 import 'package:app/src/generated/grid.pb.dart' as grid;
 import 'package:fixnum/fixnum.dart';
-import 'package:dart_numerics/dart_numerics.dart' as num;
 import 'dart:collection';
 
 enum BasisType {
@@ -105,7 +104,7 @@ class Grid2D {
 
     var basis = _basis(arg, node.key, basisType);
 
-    if (basis.abs() < num.epsilon) {
+    if (basis.abs() < 0.000000001) {
       return Point2D(0, 0);
     }
 

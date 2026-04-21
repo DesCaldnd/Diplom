@@ -1,0 +1,36 @@
+# Этап 1: Сборка Flutter Web приложения
+FROM debian:bullseye-slim AS build-env
+
+# Устанавливаем необходимые зависимости для Flutter
+RUN apt-get update && apt-get install -y curl git wget unzip libgconf-2-4 gdb libstdc++6 libglu1-mesa fonts-droid-fallback python3
+
+# Скачиваем Flutter
+RUN git clone https://github.com/flutter/flutter.git /usr/local/flutter
+
+# Добавляем Flutter в PATH
+ENV PATH="/usr/local/flutter/bin:/usr/local/flutter/bin/cache/dart-sdk/bin:${PATH}"
+
+# Переключаемся на стабильную ветку и включаем поддержку web
+RUN flutter channel stable && flutter upgrade && flutter config --enable-web
+
+# Задаем рабочую директорию
+WORKDIR /build
+
+# Копируем исходный код приложения из папки app (контекст будет корнем проекта)
+COPY app/ ./
+
+# Получаем зависимости и собираем проект
+RUN flutter pub get
+RUN flutter build web --release
+
+# Этап 2: Подъем Nginx сервера для раздачи статики
+FROM nginx:alpine
+
+# Копируем собранные файлы из первого этапа в стандартную директорию Nginx
+COPY --from=build-env /build/build/web /usr/share/nginx/html
+
+# Открываем 80 порт
+EXPOSE 80
+
+# Запускаем Nginx
+CMD ["nginx", "-g", "daemon off;"]
