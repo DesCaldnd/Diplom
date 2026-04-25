@@ -226,20 +226,24 @@ class _GridScreenState extends State<GridScreen> {
                         children: [
                           _buildTextField(
                             _formXCtrl,
-                            'Formula X',
+                            _formulaType == pb.FormulaType.DIFFUR
+                                ? 'Formula X'
+                                : 'Formula U',
                             hint:
                                 _formulaType == pb.FormulaType.DIFFUR
                                     ? 'dx(t)/dt=f1(x, y, t)'
-                                    : 'x=f1(x, y)',
+                                    : 'u=f1(x, y)',
                             isNumeric: false,
                           ),
                           _buildTextField(
                             _formYCtrl,
-                            'Formula Y',
+                            _formulaType == pb.FormulaType.DIFFUR
+                                ? 'Formula Y'
+                                : 'Formula V',
                             hint:
                                 _formulaType == pb.FormulaType.DIFFUR
                                     ? 'dy(t)/dt=f2(x, y, t)'
-                                    : 'y=f2(x, y)',
+                                    : 'v=f2(x, y)',
                             isNumeric: false,
                           ),
                         ],
