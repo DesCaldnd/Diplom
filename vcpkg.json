@@ -10,5 +10,7 @@
     "version>=" : "1.76.0#1"
   }, {
     "name" : "fmt"
+  }, {
+    "name" : "gtest"
   } ]
 }

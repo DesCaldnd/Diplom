@@ -1,3 +1,2 @@
-add_executable(basics basics.cpp)
-
-target_link_libraries(basics PRIVATE compute util)
+add_executable(examples examples.cpp)
+target_link_libraries(examples PRIVATE compute util)
