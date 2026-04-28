@@ -3,6 +3,7 @@ package compute_test
 import (
 	"math"
 	"testing"
+	"strconv"
 
 	"Diplom/compute"
 )
@@ -20,19 +21,19 @@ func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
 
 	b.Run("1D", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func1d, compute.Point{0.0}, compute.Point{math.Pi}, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			compute.NewAdaptiveSparseGrid(func1d, compute.Point{0.0}, compute.Point{math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 		}
 	})
 
 	b.Run("2D", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func2d, compute.Point{0.0, 0.0}, compute.Point{math.Pi, math.Pi}, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			compute.NewAdaptiveSparseGrid(func2d, compute.Point{0.0, 0.0}, compute.Point{math.Pi, math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 		}
 	})
 
 	b.Run("3D", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func3d, compute.Point{0.0, 0.0, 0.0}, compute.Point{math.Pi, math.Pi, math.Pi}, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			compute.NewAdaptiveSparseGrid(func3d, compute.Point{0.0, 0.0, 0.0}, compute.Point{math.Pi, math.Pi, math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 		}
 	})
 }
@@ -47,7 +48,7 @@ func BenchmarkBuildTypeAndBasisTypeComparison(b *testing.B) {
 
 	min := compute.Point{0.0, 0.0}
 	max := compute.Point{1.0, 1.0}
-	epsilon := 0.05
+	epsilon := 0.001
 
 	b.Run("Sequential_Linear", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -83,28 +84,34 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 		return compute.Point{-0.5 * state[0]}
 	}
 
-	b.Run("Approach1_t_as_dimension", func(b *testing.B) {
-		funcWithT := func(arg compute.Point) compute.Point {
-			x0 := arg[0]
-			t := arg[1]
-			return integrateRk4(diffEq, compute.Point{x0}, 0.0, t, 50)
-		}
-		min := compute.Point{0.0, 0.0}
-		max := compute.Point{10.0, 2.0}
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcWithT, min, max, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
+	tMaxValues := []float64{2.0, 10.0, 30.0, 50.0}
 
-	b.Run("Approach2_make_next_iteration", func(b *testing.B) {
-		integrate1s := func(state compute.Point) compute.Point {
-			return integrateRk4(diffEq, state, 0.0, 1.0, 25)
-		}
-		min := compute.Point{0.0}
-		max := compute.Point{10.0}
-		for i := 0; i < b.N; i++ {
-			gridT1, _ := compute.NewAdaptiveSparseGrid(integrate1s, min, max, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-			gridT1.MakeNextIteration(integrate1s, 0.01, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
+	for _, tMax := range tMaxValues {
+		b.Run("Approach1_t_as_dimension_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
+			funcWithT := func(arg compute.Point) compute.Point {
+				x0 := arg[0]
+				t := arg[1]
+				return integrateRk4(diffEq, compute.Point{x0}, 0.0, t, 50)
+			}
+			min := compute.Point{0.0, 0.0}
+			max := compute.Point{10.0, tMax}
+			for i := 0; i < b.N; i++ {
+				compute.NewAdaptiveSparseGrid(funcWithT, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			}
+		})
+
+		b.Run("Approach2_make_next_iteration_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
+			integrate1s := func(state compute.Point) compute.Point {
+				return integrateRk4(diffEq, state, 0.0, 1.0, 25)
+			}
+			min := compute.Point{0.0}
+			max := compute.Point{10.0}
+			for i := 0; i < b.N; i++ {
+				grid, _ := compute.NewAdaptiveSparseGrid(integrate1s, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				for step := 1; step < int(tMax); step++ {
+					grid, _ = grid.MakeNextIteration(integrate1s, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				}
+			}
+		})
+	}
 }

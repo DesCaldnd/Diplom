@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"sync"
 
 	"Diplom/compute"
 	pb "Diplom/proto"
@@ -16,7 +15,6 @@ type Formula struct {
 	isDiffur bool
 	exprX    *govaluate.EvaluableExpression
 	exprY    *govaluate.EvaluableExpression
-	mu       sync.Mutex
 	tBegin   compute.ScalarType
 	tEnd     compute.ScalarType
 }
@@ -45,9 +43,6 @@ func (f *Formula) SetDiapason(startT, endT compute.ScalarType) {
 }
 
 func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	x := arg[0]
 	y := arg[1]
 

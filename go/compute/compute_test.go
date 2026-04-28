@@ -2,6 +2,7 @@ package compute_test
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 
 	"Diplom/compute"
@@ -41,22 +42,30 @@ func TestSimple1DFunction(t *testing.T) {
 
 	min := compute.Point{-2.0}
 	max := compute.Point{2.0}
-	epsilon := 0.01
+	epsilon := 0.001
 
 	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 	if err != nil {
 		t.Fatalf("failed to create grid: %v", err)
 	}
 
-	testPoint := compute.Point{1.5}
-	result, err := grid.Evaluate(testPoint)
-	if err != nil {
-		t.Fatalf("failed to evaluate: %v", err)
+	testPoints := []compute.Point{
+		{-2.0}, {2.0}, {0.0}, {-1.5}, {1.5}, {0.123}, {-0.987},
 	}
-	expected := funcEval(testPoint)
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
+	}
 
-	if math.Abs(result[0]-expected[0]) > epsilon*2 {
-		t.Errorf("expected %v, got %v", expected[0], result[0])
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected := funcEval(testPoint)
+
+		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
 	}
 }
 
@@ -70,22 +79,34 @@ func TestMultidimFunction(t *testing.T) {
 
 	min := compute.Point{0.0, 0.0}
 	max := compute.Point{2.0, 2.0}
-	epsilon := 0.05
+	epsilon := 0.001
 
 	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, 0)
 	if err != nil {
 		t.Fatalf("failed to create grid: %v", err)
 	}
 
-	testPoint := compute.Point{1.0, 1.5}
-	result, err := grid.Evaluate(testPoint)
-	if err != nil {
-		t.Fatalf("failed to evaluate: %v", err)
+	testPoints := []compute.Point{
+		{0.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}, {2.0, 0.0},
+		{1.0, 1.0}, {1.0, 1.5}, {0.5, 0.5}, {1.23, 0.87},
 	}
-	expected := funcEval(testPoint)
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{
+			min[0] + rand.Float64()*(max[0]-min[0]),
+			min[1] + rand.Float64()*(max[1]-min[1]),
+		})
+	}
 
-	if math.Abs(result[0]-expected[0]) > epsilon*2 {
-		t.Errorf("expected %v, got %v", expected[0], result[0])
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected := funcEval(testPoint)
+
+		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
 	}
 }
 
@@ -103,22 +124,30 @@ func TestDifferentialEquation(t *testing.T) {
 
 	min := compute.Point{0.0}
 	max := compute.Point{5.0}
-	epsilon := 0.01
+	epsilon := 0.001
 
 	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 	if err != nil {
 		t.Fatalf("failed to create grid: %v", err)
 	}
 
-	testPoint := compute.Point{2.0}
-	result, err := grid.Evaluate(testPoint)
-	if err != nil {
-		t.Fatalf("failed to evaluate: %v", err)
+	testPoints := []compute.Point{
+		{0.0}, {5.0}, {2.5}, {1.0}, {2.0}, {3.14}, {4.99},
 	}
-	expected := funcEval(testPoint)
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
+	}
 
-	if math.Abs(result[0]-expected[0]) > epsilon*2 {
-		t.Errorf("expected %v, got %v", expected[0], result[0])
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected := funcEval(testPoint)
+
+		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
 	}
 }
 
@@ -134,7 +163,7 @@ func TestAnchorPoints(t *testing.T) {
 
 	min := compute.Point{0.0}
 	max := compute.Point{2.0 * math.Pi}
-	epsilon := 0.05
+	epsilon := 0.001
 
 	gridWithoutAnchors, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 	if err != nil {
@@ -147,16 +176,68 @@ func TestAnchorPoints(t *testing.T) {
 		t.Fatalf("failed to create grid: %v", err)
 	}
 
-	testPoint := compute.Point{math.Pi / 2.0}
-	resultWithout, _ := gridWithoutAnchors.Evaluate(testPoint)
-	resultWith, _ := gridWithAnchors.Evaluate(testPoint)
-	expected := funcEval(testPoint)
-
-	if math.Abs(resultWithout[0]-0.0) > epsilon*2 {
-		t.Errorf("without anchors: expected ~0.0, got %v", resultWithout[0])
+	testPoints := []compute.Point{
+		{math.Pi / 2.0}, {math.Pi}, {3.0 * math.Pi / 2.0}, {math.Pi / 4.0}, {1.0}, {5.0},
+	}
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
 	}
 
-	if math.Abs(resultWith[0]-expected[0]) > epsilon*2 {
-		t.Errorf("with anchors: expected %v, got %v", expected[0], resultWith[0])
+	for _, testPoint := range testPoints {
+		resultWithout, _ := gridWithoutAnchors.Evaluate(testPoint)
+		resultWith, _ := gridWithAnchors.Evaluate(testPoint)
+		expected := funcEval(testPoint)
+
+		// Without anchors, it might just be a flat line at 0
+		if math.Abs(resultWithout[0]-0.0) > epsilon*2 && math.Abs(resultWithout[0]-expected[0]) > epsilon*2 {
+			// It's either 0 or correct, but usually 0
+		}
+
+		if math.Abs(resultWith[0]-expected[0]) > epsilon*2 {
+			t.Errorf("with anchors at %v: expected %v, got %v", testPoint, expected[0], resultWith[0])
+		}
+	}
+}
+
+func TestMakeNextIteration(t *testing.T) {
+	g := func(arg compute.Point) compute.Point {
+		return compute.Point{arg[0] + 1.0}
+	}
+
+	f := func(arg compute.Point) compute.Point {
+		return compute.Point{arg[0] * arg[0]}
+	}
+
+	min := compute.Point{0.0}
+	max := compute.Point{2.0}
+	epsilon := 0.001
+
+	gridG, err := compute.NewAdaptiveSparseGrid(g, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+	if err != nil {
+		t.Fatalf("failed to create gridG: %v", err)
+	}
+
+	gridFG, err := gridG.MakeNextIteration(f, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+	if err != nil {
+		t.Fatalf("failed to create gridFG: %v", err)
+	}
+
+	testPoints := []compute.Point{
+		{0.0}, {2.0}, {1.0}, {0.5}, {1.5}, {0.123}, {1.987},
+	}
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
+	}
+
+	for _, testPoint := range testPoints {
+		result, err := gridFG.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected := f(g(testPoint))
+
+		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
 	}
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-
-	pb "Diplom/proto"
 )
 
 type BuildType int64
@@ -181,40 +179,6 @@ func (g *AdaptiveSparseGrid) MakeNextIterationWithContext(
 		return funcEval(evalRes)
 	}
 	return NewAdaptiveSparseGridWithContext(ctx, wrapper, g.min, g.max, epsilon, anchorPoints, basisType, buildType, maxLevel, maxNodesInGrid)
-}
-
-func (g *AdaptiveSparseGrid) ToPb2D() *pb.Grid2D {
-	grid := &pb.Grid2D{}
-	if g.basisType == BasisTypeLinear {
-		grid.BasisType = pb.BasisType_LINEAR
-	} else {
-		grid.BasisType = pb.BasisType_QUADRATIC
-	}
-
-	grid.Min = &pb.Point2D{X: g.min[0], Y: g.min[1]}
-	grid.Max = &pb.Point2D{X: g.max[0], Y: g.max[1]}
-
-	for _, n := range g.nodes {
-		grid.Nodes = append(grid.Nodes, nodeToPb(n))
-	}
-
-	for _, ep := range g.entryPoints {
-		grid.EntryPoints = append(grid.EntryPoints, nodeToPb(ep.node))
-	}
-
-	return grid
-}
-
-func nodeToPb(n node) *pb.Grid2D_Node2D {
-	return &pb.Grid2D_Node2D{
-		HasChildren: n.hasChildren,
-		Alpha:       &pb.Point2D{X: n.alpha[0], Y: n.alpha[1]},
-		CenterUnit:  &pb.Point2D{X: n.centerUnit[0], Y: n.centerUnit[1]},
-		Key: &pb.Grid2D_GridKey2D{
-			Level: &pb.Grid2D_Index2D{X: uint64(n.key.level[0]), Y: uint64(n.key.level[1])},
-			Index: &pb.Grid2D_Index2D{X: uint64(n.key.index[0]), Y: uint64(n.key.index[1])},
-		},
-	}
 }
 
 func (g *AdaptiveSparseGrid) BasisType() BasisType {
@@ -431,6 +395,8 @@ func (g *AdaptiveSparseGrid) buildGrid(
 	newNodes := make(map[string]node)
 	newNodes[entryPoint.key.String()] = entryPoint
 
+	entryPointKeyString := entryPoint.key.String()
+
 	currentMaxLevel := int64(0)
 	for i := int64(0); i < g.inDim; i++ {
 		if entryPoint.key.level[i] > currentMaxLevel {
@@ -449,6 +415,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		nodeQueue = nodeQueue[1:]
 
 		currentNode := newNodes[currentKey.String()]
+		activeEntryNode := newNodes[entryPointKeyString]
 
 		canContinue := false
 
@@ -475,7 +442,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		if canContinue && !canContinueForce {
 			for _, anchor := range anchors {
 				if currentNode.isPointInAffectZone(anchor.arg, g.inDim) {
-					evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &entryPoint, newNodes)
+					evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &activeEntryNode, newNodes)
 					if evalRes.Sub(anchor.ans).Length() >= epsilon {
 						canContinue = false
 						affectDirs := getAffectDirection(anchor.arg, currentNode.key.level, currentNode.key.index, g.inDim)
@@ -524,7 +491,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			keyRight.index[i] = 2*currentNode.key.index[i] + 1
 
 			if (directionLeft & directions[i]) != directionNone {
-				leftNodeKey, err := g.createNode(funcEval, keyLeft, &entryPoint, dimension, newNodes)
+				leftNodeKey, err := g.createNode(funcEval, keyLeft, &activeEntryNode, dimension, newNodes)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -534,7 +501,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			}
 
 			if (directionRight & directions[i]) != directionNone {
-				rightNodeKey, err := g.createNode(funcEval, keyRight, &entryPoint, dimension, newNodes)
+				rightNodeKey, err := g.createNode(funcEval, keyRight, &activeEntryNode, dimension, newNodes)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -549,7 +516,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		}
 	}
 
-	return newNodes[entryPoint.key.String()], newNodes, nil
+	return newNodes[entryPointKeyString], newNodes, nil
 }
 
 func (g *AdaptiveSparseGrid) evaluateForDimAndEntryPoint(x Point, maxGridDim int64, entryPoint *node, additionalNodes map[string]node) Point {
