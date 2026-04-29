@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"Diplom/compute"
-	pb "Diplom/proto"
+	pb "Diplom/gridProto"
 	"github.com/Knetic/govaluate"
 )
 

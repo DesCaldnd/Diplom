@@ -4,7 +4,7 @@
 // 	protoc        v7.34.1
 // source: grid.proto
 
-package proto
+package gridProto
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -650,7 +650,7 @@ const file_grid_proto_rawDesc = "" +
 	"\n" +
 	"\x06DIFFUR\x10\x012=\n" +
 	"\vGridService\x12.\n" +
-	"\tGetGrid2D\x12\x13.grid.Grid2DRequest\x1a\f.grid.Grid2DB\x0eZ\fDiplom/protob\x06proto3"
+	"\tGetGrid2D\x12\x13.grid.Grid2DRequest\x1a\f.grid.Grid2DB\x12Z\x10Diplom/gridProtob\x06proto3"
 
 var (
 	file_grid_proto_rawDescOnce sync.Once

@@ -241,3 +241,42 @@ func TestMakeNextIteration(t *testing.T) {
 		}
 	}
 }
+
+// Тест 6: Тест работы линейного базиса
+func TestLinearBasis(t *testing.T) {
+	funcEval := func(arg compute.Point) compute.Point {
+		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}
+	}
+
+	min := compute.Point{0.0, 0.0}
+	max := compute.Point{2.0, 2.0}
+	epsilon := 0.001
+
+	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeSequential, 0, 0)
+	if err != nil {
+		t.Fatalf("failed to create grid: %v", err)
+	}
+
+	testPoints := []compute.Point{
+		{0.0, 0.0}, {2.0, 2.0}, {0.0, 2.0}, {2.0, 0.0},
+		{1.0, 1.0}, {1.0, 1.5}, {0.5, 0.5}, {1.23, 0.87},
+	}
+	for i := 0; i < 10; i++ {
+		testPoints = append(testPoints, compute.Point{
+			min[0] + rand.Float64()*(max[0]-min[0]),
+			min[1] + rand.Float64()*(max[1]-min[1]),
+		})
+	}
+
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected := funcEval(testPoint)
+
+		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
+	}
+}

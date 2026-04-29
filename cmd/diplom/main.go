@@ -1,6 +1,6 @@
 package main
 
-//go:generate protoc --proto_path=../../../proto --go_out=../../proto --go_opt=paths=source_relative --go-grpc_out=../../proto --go-grpc_opt=paths=source_relative grid.proto
+//go:generate protoc --proto_path=../../proto --go_out=../../gridProto --go_opt=paths=source_relative --go-grpc_out=../../gridProto --go-grpc_opt=paths=source_relative grid.proto
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 
 	"google.golang.org/grpc"
 	"Diplom/internal/server"
-	pb "Diplom/proto"
+	pb "Diplom/gridProto"
 )
 
 func main() {
 	fmt.Println("Starting server...")
-	lis, err := net.Listen("tcp", ":50051")
+	lis, err := net.Listen("tcp", ":9999")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

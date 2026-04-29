@@ -4,7 +4,7 @@
 // - protoc             v7.34.1
 // source: grid.proto
 
-package proto
+package gridProto
 
 import (
 	context "context"

@@ -2,8 +2,8 @@ package compute_test
 
 import (
 	"math"
-	"testing"
 	"strconv"
+	"testing"
 
 	"Diplom/compute"
 )
@@ -17,7 +17,9 @@ import (
 func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
 	func1d := func(arg compute.Point) compute.Point { return compute.Point{math.Sin(arg[0])} }
 	func2d := func(arg compute.Point) compute.Point { return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1])} }
-	func3d := func(arg compute.Point) compute.Point { return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1]) * math.Sin(arg[2])} }
+	func3d := func(arg compute.Point) compute.Point {
+		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1]) * math.Sin(arg[2])}
+	}
 
 	b.Run("1D", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -43,24 +45,12 @@ func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
 // и LINEAR vs QUADRATIC базисах.
 func BenchmarkBuildTypeAndBasisTypeComparison(b *testing.B) {
 	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{math.Sin(arg[0]*5.0) * math.Cos(arg[1]*5.0)}
+		return compute.Point{math.Sin(arg[0]*2.0) * math.Cos(arg[1]*2.0)}
 	}
 
 	min := compute.Point{0.0, 0.0}
 	max := compute.Point{1.0, 1.0}
 	epsilon := 0.001
-
-	b.Run("Sequential_Linear", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeSequential, 0, 0)
-		}
-	})
-
-	b.Run("Parallel_Linear", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeParallel, 0, 0)
-		}
-	})
 
 	b.Run("Sequential_Quadratic", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -71,6 +61,18 @@ func BenchmarkBuildTypeAndBasisTypeComparison(b *testing.B) {
 	b.Run("Parallel_Quadratic", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+		}
+	})
+
+	b.Run("Sequential_Linear", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeSequential, 0, 0)
+		}
+	})
+
+	b.Run("Parallel_Linear", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeParallel, 0, 0)
 		}
 	})
 }
