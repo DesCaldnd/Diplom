@@ -2,13 +2,12 @@ package server
 
 import (
 	"context"
+	"math"
 
 	"Diplom/compute"
 	pb "Diplom/gridProto"
 	"github.com/Knetic/govaluate"
 )
-
-import "math"
 
 type Formula struct {
 	dt       compute.ScalarType
@@ -20,11 +19,59 @@ type Formula struct {
 }
 
 func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool) (*Formula, error) {
-	exprX, err := govaluate.NewEvaluableExpression(formulaX)
+	functions := map[string]govaluate.ExpressionFunction{
+		"sin": func(args ...interface{}) (interface{}, error) {
+			return math.Sin(args[0].(float64)), nil
+		},
+		"cos": func(args ...interface{}) (interface{}, error) {
+			return math.Cos(args[0].(float64)), nil
+		},
+		"tan": func(args ...interface{}) (interface{}, error) {
+			return math.Tan(args[0].(float64)), nil
+		},
+		"asin": func(args ...interface{}) (interface{}, error) {
+			return math.Asin(args[0].(float64)), nil
+		},
+		"acos": func(args ...interface{}) (interface{}, error) {
+			return math.Acos(args[0].(float64)), nil
+		},
+		"atan": func(args ...interface{}) (interface{}, error) {
+			return math.Atan(args[0].(float64)), nil
+		},
+		"sinh": func(args ...interface{}) (interface{}, error) {
+			return math.Sinh(args[0].(float64)), nil
+		},
+		"cosh": func(args ...interface{}) (interface{}, error) {
+			return math.Cosh(args[0].(float64)), nil
+		},
+		"tanh": func(args ...interface{}) (interface{}, error) {
+			return math.Tanh(args[0].(float64)), nil
+		},
+		"exp": func(args ...interface{}) (interface{}, error) {
+			return math.Exp(args[0].(float64)), nil
+		},
+		"log": func(args ...interface{}) (interface{}, error) {
+			return math.Log(args[0].(float64)), nil
+		},
+		"log10": func(args ...interface{}) (interface{}, error) {
+			return math.Log10(args[0].(float64)), nil
+		},
+		"sqrt": func(args ...interface{}) (interface{}, error) {
+			return math.Sqrt(args[0].(float64)), nil
+		},
+		"abs": func(args ...interface{}) (interface{}, error) {
+			return math.Abs(args[0].(float64)), nil
+		},
+		"pow": func(args ...interface{}) (interface{}, error) {
+			return math.Pow(args[0].(float64), args[1].(float64)), nil
+		},
+	}
+
+	exprX, err := govaluate.NewEvaluableExpressionWithFunctions(formulaX, functions)
 	if err != nil {
 		return nil, err
 	}
-	exprY, err := govaluate.NewEvaluableExpression(formulaY)
+	exprY, err := govaluate.NewEvaluableExpressionWithFunctions(formulaY, functions)
 	if err != nil {
 		return nil, err
 	}
