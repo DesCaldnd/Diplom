@@ -2,10 +2,12 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"Diplom/compute"
 	pb "Diplom/gridProto"
+
 	"github.com/Knetic/govaluate"
 )
 
@@ -76,6 +78,21 @@ func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool)
 		return nil, err
 	}
 
+	validationParameters := map[string]interface{}{
+		"x": 0.0,
+		"y": 0.0,
+	}
+	if isDiffur {
+		validationParameters["t"] = 0.0
+	}
+
+	if _, err = exprX.Evaluate(validationParameters); err != nil {
+		return nil, fmt.Errorf("formulaX cannot be evaluated: %w", err)
+	}
+	if _, err = exprY.Evaluate(validationParameters); err != nil {
+		return nil, fmt.Errorf("formulaY cannot be evaluated: %w", err)
+	}
+
 	return &Formula{
 		dt:       dt,
 		isDiffur: isDiffur,
@@ -90,26 +107,68 @@ func (f *Formula) SetDiapason(startT, endT compute.ScalarType) {
 }
 
 func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
+	zeroPoint := compute.Point{0, 0}
+	if len(arg) < 2 {
+		return zeroPoint, fmt.Errorf("expected at least 2 arguments, got %d", len(arg))
+	}
+
 	x := arg[0]
 	y := arg[1]
 
 	parameters := make(map[string]interface{}, 8)
 
+	toFloat64 := func(value interface{}) (float64, error) {
+		result, ok := value.(float64)
+		if !ok {
+			return 0, fmt.Errorf("unexpected evaluation result type %T", value)
+		}
+		return result, nil
+	}
+
 	if f.isDiffur {
-		for t := f.tBegin; t <= f.tEnd; t += f.dt {
-			getDerivatives := func(curX, curY float64) (float64, float64) {
-				parameters["x"] = curX
-				parameters["y"] = curY
-				parameters["t"] = t
-				resX, _ := f.exprX.Evaluate(parameters)
-				resY, _ := f.exprY.Evaluate(parameters)
-				return resX.(float64), resY.(float64)
+		getDerivatives := func(curX, curY float64, t float64) (float64, float64, error) {
+			parameters["x"] = curX
+			parameters["y"] = curY
+			parameters["t"] = t
+
+			resX, err := f.exprX.Evaluate(parameters)
+			if err != nil {
+				return 0, 0, err
+			}
+			resY, err := f.exprY.Evaluate(parameters)
+			if err != nil {
+				return 0, 0, err
 			}
 
-			dx1, dy1 := getDerivatives(x, y)
-			dx2, dy2 := getDerivatives(x+dx1*f.dt/2, y+dy1*f.dt/2)
-			dx3, dy3 := getDerivatives(x+dx2*f.dt/2, y+dy2*f.dt/2)
-			dx4, dy4 := getDerivatives(x+dx3*f.dt, y+dy3*f.dt)
+			dx, err := toFloat64(resX)
+			if err != nil {
+				return 0, 0, err
+			}
+			dy, err := toFloat64(resY)
+			if err != nil {
+				return 0, 0, err
+			}
+
+			return dx, dy, nil
+		}
+
+		for t := f.tBegin; t <= f.tEnd; t += f.dt {
+			dx1, dy1, err := getDerivatives(x, y, t)
+			if err != nil {
+				return zeroPoint, err
+			}
+			dx2, dy2, err := getDerivatives(x+dx1*f.dt/2, y+dy1*f.dt/2, t)
+			if err != nil {
+				return zeroPoint, err
+			}
+			dx3, dy3, err := getDerivatives(x+dx2*f.dt/2, y+dy2*f.dt/2, t)
+			if err != nil {
+				return zeroPoint, err
+			}
+			dx4, dy4, err := getDerivatives(x+dx3*f.dt, y+dy3*f.dt, t)
+			if err != nil {
+				return zeroPoint, err
+			}
 
 			x += (f.dt / 6) * (dx1 + dx2*2 + dx3*2 + dx4)
 			y += (f.dt / 6) * (dy1 + dy2*2 + dy3*2 + dy4)
@@ -119,14 +178,20 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 		parameters["y"] = y
 		resX, err := f.exprX.Evaluate(parameters)
 		if err != nil {
-			return nil, err
+			return zeroPoint, err
 		}
 		resY, err := f.exprY.Evaluate(parameters)
 		if err != nil {
-			return nil, err
+			return zeroPoint, err
 		}
-		x = resX.(float64)
-		y = resY.(float64)
+		x, err = toFloat64(resX)
+		if err != nil {
+			return zeroPoint, err
+		}
+		y, err = toFloat64(resY)
+		if err != nil {
+			return zeroPoint, err
+		}
 	}
 
 	return compute.Point{x, y}, nil
