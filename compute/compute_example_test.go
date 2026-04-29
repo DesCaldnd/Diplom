@@ -11,8 +11,8 @@ import (
 // Проверяется базовая работа алгоритма на простой одномерной функции.
 // Функция: f(x) = x^2
 func ExampleAdaptiveSparseGrid_simple() {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] * arg[0]}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] * arg[0]}, nil
 	}
 
 	min := compute.Point{-2.0}
@@ -30,8 +30,8 @@ func ExampleAdaptiveSparseGrid_simple() {
 // Проверяется работа алгоритма на функции от 3 переменных.
 // Функция: f(x, y, z) = x*y + sin(z)
 func ExampleAdaptiveSparseGrid_multidim() {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0]*arg[1] + math.Sin(arg[2])}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0]*arg[1] + math.Sin(arg[2])}, nil
 	}
 
 	min := compute.Point{0.0, 0.0, 0.0}
@@ -61,8 +61,8 @@ func ExampleAdaptiveSparseGrid_ode() {
 		return compute.Point{alpha*x - beta*x*y, delta*x*y - gamma*y}
 	}
 
-	funcEval := func(initialState compute.Point) compute.Point {
-		return integrateRk4(diffEq, initialState, 0.0, 2.0, 100)
+	funcEval := func(initialState compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq, initialState, 0.0, 2.0, 100), nil
 	}
 
 	min := compute.Point{0.5, 0.5}
@@ -72,7 +72,7 @@ func ExampleAdaptiveSparseGrid_ode() {
 
 	testPoint := compute.Point{1.0, 1.0}
 	result, _ := grid.Evaluate(testPoint)
-	expected := funcEval(testPoint)
+	expected, _ := funcEval(testPoint)
 
 	fmt.Printf("Interpolated close to expected: %v\n", math.Abs(result[0]-expected[0]) < 0.1 && math.Abs(result[1]-expected[1]) < 0.1)
 	// Output: Interpolated close to expected: true
@@ -82,12 +82,12 @@ func ExampleAdaptiveSparseGrid_ode() {
 // Проверяется создание композиции функций f(g(x)).
 // g(x) = x + 1, f(x) = x^2. Композиция: f(g(x)) = (x+1)^2.
 func ExampleAdaptiveSparseGrid_composition() {
-	g := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] + 1.0}
+	g := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] + 1.0}, nil
 	}
 
-	f := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] * arg[0]}
+	f := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] * arg[0]}, nil
 	}
 
 	min := compute.Point{0.0}
@@ -111,8 +111,8 @@ func ExampleAdaptiveSparseGrid_odeComposition() {
 		return compute.Point{-0.5 * state[0]}
 	}
 
-	integrate1s := func(state compute.Point) compute.Point {
-		return integrateRk4(diffEq, state, 0.0, 1.0, 50)
+	integrate1s := func(state compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq, state, 0.0, 1.0, 50), nil
 	}
 
 	min := compute.Point{0.0}

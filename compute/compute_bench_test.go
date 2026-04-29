@@ -15,10 +15,12 @@ import (
 // Бенчмарк 1: Замеры простых функций разной размерности
 // Проверяется время построения сетки для функций 1D, 2D и 3D.
 func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
-	func1d := func(arg compute.Point) compute.Point { return compute.Point{math.Sin(arg[0])} }
-	func2d := func(arg compute.Point) compute.Point { return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1])} }
-	func3d := func(arg compute.Point) compute.Point {
-		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1]) * math.Sin(arg[2])}
+	func1d := func(arg compute.Point) (compute.Point, error) { return compute.Point{math.Sin(arg[0])}, nil }
+	func2d := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1])}, nil
+	}
+	func3d := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1]) * math.Sin(arg[2])}, nil
 	}
 
 	b.Run("1D", func(b *testing.B) {
@@ -44,8 +46,8 @@ func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
 // Проверяется время построения сетки для 2D функции при SEQUENTIAL vs PARALLEL
 // и LINEAR vs QUADRATIC базисах.
 func BenchmarkBuildTypeAndBasisTypeComparison(b *testing.B) {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{math.Sin(arg[0]*2.0) * math.Cos(arg[1]*2.0)}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{math.Sin(arg[0]*2.0) * math.Cos(arg[1]*2.0)}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -90,10 +92,10 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 
 	for _, tMax := range tMaxValues {
 		b.Run("Approach1_t_as_dimension_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
-			funcWithT := func(arg compute.Point) compute.Point {
+			funcWithT := func(arg compute.Point) (compute.Point, error) {
 				x0 := arg[0]
 				t := arg[1]
-				return integrateRk4(diffEq, compute.Point{x0}, 0.0, t, 50)
+				return integrateRk4(diffEq, compute.Point{x0}, 0.0, t, 50), nil
 			}
 			min := compute.Point{0.0, 0.0}
 			max := compute.Point{10.0, tMax}
@@ -103,8 +105,8 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 		})
 
 		b.Run("Approach2_make_next_iteration_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
-			integrate1s := func(state compute.Point) compute.Point {
-				return integrateRk4(diffEq, state, 0.0, 1.0, 25)
+			integrate1s := func(state compute.Point) (compute.Point, error) {
+				return integrateRk4(diffEq, state, 0.0, 1.0, 25), nil
 			}
 			min := compute.Point{0.0}
 			max := compute.Point{10.0}

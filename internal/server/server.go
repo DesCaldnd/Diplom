@@ -78,21 +78,6 @@ func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool)
 		return nil, err
 	}
 
-	validationParameters := map[string]interface{}{
-		"x": 0.0,
-		"y": 0.0,
-	}
-	if isDiffur {
-		validationParameters["t"] = 0.0
-	}
-
-	if _, err = exprX.Evaluate(validationParameters); err != nil {
-		return nil, fmt.Errorf("formulaX cannot be evaluated: %w", err)
-	}
-	if _, err = exprY.Evaluate(validationParameters); err != nil {
-		return nil, fmt.Errorf("formulaY cannot be evaluated: %w", err)
-	}
-
 	return &Formula{
 		dt:       dt,
 		isDiffur: isDiffur,
@@ -234,10 +219,7 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 
 	grid, err := compute.NewAdaptiveSparseGridWithContext(
 		ctx,
-		func(p compute.Point) compute.Point {
-			res, _ := formula.Evaluate(p)
-			return res
-		},
+		formula.Evaluate,
 		min, max,
 		req.Eps,
 		anchorPoints,
@@ -254,10 +236,7 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		formula.SetDiapason(currentStep, math.Min(currentStep+1.0, step))
 		grid, err = grid.MakeNextIterationWithContext(
 			ctx,
-			func(p compute.Point) compute.Point {
-				res, _ := formula.Evaluate(p)
-				return res
-			},
+			formula.Evaluate,
 			req.Eps,
 			anchorPoints,
 			basisType,

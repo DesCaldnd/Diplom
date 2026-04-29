@@ -25,7 +25,7 @@ type AdaptiveSparseGrid struct {
 }
 
 func NewAdaptiveSparseGrid(
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	min, max Point,
 	epsilon ScalarType,
 	anchorPoints []Point,
@@ -39,7 +39,7 @@ func NewAdaptiveSparseGrid(
 
 func NewAdaptiveSparseGridWithContext(
 	ctx context.Context,
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	min, max Point,
 	epsilon ScalarType,
 	anchorPoints []Point,
@@ -58,7 +58,10 @@ func NewAdaptiveSparseGridWithContext(
 		}
 	}
 
-	sampleOut := funcEval(min)
+	sampleOut, err := funcEval(min)
+	if err != nil {
+		return nil, err
+	}
 	outDim := int64(len(sampleOut))
 
 	grid := &AdaptiveSparseGrid{
@@ -70,12 +73,15 @@ func NewAdaptiveSparseGridWithContext(
 		nodes:     make(map[string]node),
 	}
 
-	err := grid.checkConstraints()
+	err = grid.checkConstraints()
 	if err != nil {
 		return nil, err
 	}
 
-	anchors := grid.calculateOriginalFunctionAtPoints(funcEval, anchorPoints)
+	anchors, err := grid.calculateOriginalFunctionAtPoints(funcEval, anchorPoints)
+	if err != nil {
+		return nil, err
+	}
 
 	err = grid.build(ctx, funcEval, epsilon, anchors, buildType, maxLevel, maxNodesInGrid)
 	if err != nil {
@@ -117,15 +123,19 @@ type anchorPair struct {
 	ans Point
 }
 
-func (g *AdaptiveSparseGrid) calculateOriginalFunctionAtPoints(funcEval func(Point) Point, anchorPoints []Point) []anchorPair {
+func (g *AdaptiveSparseGrid) calculateOriginalFunctionAtPoints(funcEval func(Point) (Point, error), anchorPoints []Point) ([]anchorPair, error) {
 	result := make([]anchorPair, 0, len(anchorPoints))
 	for _, arg := range anchorPoints {
+		ans, err := funcEval(arg)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, anchorPair{
 			arg: g.toUnit(arg),
-			ans: funcEval(arg),
+			ans: ans,
 		})
 	}
-	return result
+	return result, nil
 }
 
 func (g *AdaptiveSparseGrid) checkEvaluationPoint(real Point) error {
@@ -148,7 +158,7 @@ func (g *AdaptiveSparseGrid) Evaluate(x Point) (Point, error) {
 }
 
 func (g *AdaptiveSparseGrid) MakeNextIteration(
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	epsilon ScalarType,
 	anchorPoints []Point,
 	basisType BasisType,
@@ -161,7 +171,7 @@ func (g *AdaptiveSparseGrid) MakeNextIteration(
 
 func (g *AdaptiveSparseGrid) MakeNextIterationWithContext(
 	ctx context.Context,
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	epsilon ScalarType,
 	anchorPoints []Point,
 	basisType BasisType,
@@ -174,8 +184,11 @@ func (g *AdaptiveSparseGrid) MakeNextIterationWithContext(
 			return nil, fmt.Errorf("anchor points must have the same dimension as min/max (IN_DIM)")
 		}
 	}
-	wrapper := func(x Point) Point {
-		evalRes, _ := g.Evaluate(x)
+	wrapper := func(x Point) (Point, error) {
+		evalRes, err := g.Evaluate(x)
+		if err != nil {
+			return nil, err
+		}
 		return funcEval(evalRes)
 	}
 	return NewAdaptiveSparseGridWithContext(ctx, wrapper, g.min, g.max, epsilon, anchorPoints, basisType, buildType, maxLevel, maxNodesInGrid)
@@ -278,7 +291,7 @@ type buildResult struct {
 
 func (g *AdaptiveSparseGrid) build(
 	ctx context.Context,
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	epsilon ScalarType,
 	anchors []anchorPair,
 	buildType BuildType,
@@ -354,7 +367,7 @@ func (g *AdaptiveSparseGrid) build(
 
 func (g *AdaptiveSparseGrid) buildGridTask(
 	ctx context.Context,
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	epsilon ScalarType,
 	anchors []anchorPair,
 	key gridKey,
@@ -383,7 +396,7 @@ func (g *AdaptiveSparseGrid) buildGridTask(
 
 func (g *AdaptiveSparseGrid) buildGrid(
 	ctx context.Context,
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	epsilon ScalarType,
 	anchors []anchorPair,
 	entryPoint node,
@@ -529,7 +542,7 @@ func (g *AdaptiveSparseGrid) evaluateForDimAndEntryPoint(x Point, maxGridDim int
 }
 
 func (g *AdaptiveSparseGrid) createNode(
-	funcEval func(Point) Point,
+	funcEval func(Point) (Point, error),
 	key gridKey,
 	entryPoint *node,
 	dimension int64,
@@ -548,7 +561,10 @@ func (g *AdaptiveSparseGrid) createNode(
 	}
 
 	realArg := g.toReal(n.centerUnit)
-	etalon := funcEval(realArg)
+	etalon, err := funcEval(realArg)
+	if err != nil {
+		return nil, err
+	}
 
 	if int64(len(etalon)) != g.outDim {
 		return nil, fmt.Errorf("function returned point of dimension %d, expected %d (OUT_DIM)", len(etalon), g.outDim)

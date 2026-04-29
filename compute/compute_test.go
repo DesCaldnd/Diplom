@@ -11,8 +11,8 @@ import (
 // Простой интегратор методом Рунге-Кутты 4-го порядка
 func rk4Step(f func(compute.Point, float64) compute.Point, x compute.Point, t float64, dt float64) compute.Point {
 	k1 := f(x, t)
-	k2 := f(x.Add(k1.MulScalar(dt / 2.0)), t+dt/2.0)
-	k3 := f(x.Add(k2.MulScalar(dt / 2.0)), t+dt/2.0)
+	k2 := f(x.Add(k1.MulScalar(dt/2.0)), t+dt/2.0)
+	k3 := f(x.Add(k2.MulScalar(dt/2.0)), t+dt/2.0)
 	k4 := f(x.Add(k3.MulScalar(dt)), t+dt)
 	return x.Add(k1.Add(k2.MulScalar(2.0)).Add(k3.MulScalar(2.0)).Add(k4).MulScalar(dt / 6.0))
 }
@@ -36,8 +36,8 @@ func integrateRk4(f func(compute.Point, float64) compute.Point, x0 compute.Point
 // Проверяется, что интерполяция функции f(x) = x^2 работает корректно
 // и ошибка не превышает заданный epsilon.
 func TestSimple1DFunction(t *testing.T) {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] * arg[0]}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] * arg[0]}, nil
 	}
 
 	min := compute.Point{-2.0}
@@ -61,7 +61,7 @@ func TestSimple1DFunction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
 		}
-		expected := funcEval(testPoint)
+		expected, _ := funcEval(testPoint)
 
 		if math.Abs(result[0]-expected[0]) > epsilon*2 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
@@ -73,8 +73,8 @@ func TestSimple1DFunction(t *testing.T) {
 // Проверяется интерполяция функции f(x, y) = x*y + sin(x)
 // с различными параметрами (базис, тип сборки).
 func TestMultidimFunction(t *testing.T) {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -102,7 +102,7 @@ func TestMultidimFunction(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
 		}
-		expected := funcEval(testPoint)
+		expected, _ := funcEval(testPoint)
 
 		if math.Abs(result[0]-expected[0]) > epsilon*2 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
@@ -118,8 +118,8 @@ func TestDifferentialEquation(t *testing.T) {
 		return compute.Point{-state[0]}
 	}
 
-	funcEval := func(initialState compute.Point) compute.Point {
-		return integrateRk4(diffEq, initialState, 0.0, 1.0, 100)
+	funcEval := func(initialState compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq, initialState, 0.0, 1.0, 100), nil
 	}
 
 	min := compute.Point{0.0}
@@ -143,7 +143,7 @@ func TestDifferentialEquation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
 		}
-		expected := funcEval(testPoint)
+		expected, _ := funcEval(testPoint)
 
 		if math.Abs(result[0]-expected[0]) > epsilon*2 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
@@ -157,8 +157,8 @@ func TestDifferentialEquation(t *testing.T) {
 // может посчитать функцию тождественным нулем.
 // С anchor points (например, pi/2 и 3*pi/2) алгоритм должен отработать корректно.
 func TestAnchorPoints(t *testing.T) {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{math.Sin(arg[0])}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{math.Sin(arg[0])}, nil
 	}
 
 	min := compute.Point{0.0}
@@ -186,7 +186,7 @@ func TestAnchorPoints(t *testing.T) {
 	for _, testPoint := range testPoints {
 		resultWithout, _ := gridWithoutAnchors.Evaluate(testPoint)
 		resultWith, _ := gridWithAnchors.Evaluate(testPoint)
-		expected := funcEval(testPoint)
+		expected, _ := funcEval(testPoint)
 
 		// Without anchors, it might just be a flat line at 0
 		if math.Abs(resultWithout[0]-0.0) > epsilon*2 && math.Abs(resultWithout[0]-expected[0]) > epsilon*2 {
@@ -200,12 +200,12 @@ func TestAnchorPoints(t *testing.T) {
 }
 
 func TestMakeNextIteration(t *testing.T) {
-	g := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] + 1.0}
+	g := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] + 1.0}, nil
 	}
 
-	f := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0] * arg[0]}
+	f := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] * arg[0]}, nil
 	}
 
 	min := compute.Point{0.0}
@@ -234,7 +234,14 @@ func TestMakeNextIteration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
 		}
-		expected := f(g(testPoint))
+		gResult, err := g(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate g at %v: %v", testPoint, err)
+		}
+		expected, err := f(gResult)
+		if err != nil {
+			t.Fatalf("failed to evaluate f at %v: %v", testPoint, err)
+		}
 
 		if math.Abs(result[0]-expected[0]) > epsilon*2 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
@@ -244,8 +251,8 @@ func TestMakeNextIteration(t *testing.T) {
 
 // Тест 6: Тест работы линейного базиса
 func TestLinearBasis(t *testing.T) {
-	funcEval := func(arg compute.Point) compute.Point {
-		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -273,7 +280,7 @@ func TestLinearBasis(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
 		}
-		expected := funcEval(testPoint)
+		expected, _ := funcEval(testPoint)
 
 		if math.Abs(result[0]-expected[0]) > epsilon*2 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
