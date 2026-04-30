@@ -86,7 +86,8 @@ services:
       - "3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_DOMAIN: diplom.funandchecks.ru
+      GF_SERVER_ROOT_URL: https://diplom.funandchecks.ru/grafana/
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - grafana_data:/var/lib/grafana
