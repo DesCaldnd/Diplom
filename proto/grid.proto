@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package grid;
 
+option go_package = "Diplom/gridProto";
+
 message Point2D {
     double x = 1;
     double y = 2;
