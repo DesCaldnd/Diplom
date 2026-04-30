@@ -199,6 +199,73 @@ func TestAnchorPoints(t *testing.T) {
 	}
 }
 
+// Тест 5: Проверка ошибки при неверной размерности точки в Evaluate
+// Проверяется, что если передать точку с размерностью, отличной от размерности сетки,
+// метод Evaluate возвращает ошибку.
+func TestEvaluateInvalidDimension(t *testing.T) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] + arg[1]}, nil
+	}
+
+	grid, err := compute.NewAdaptiveSparseGrid(
+		funcEval,
+		compute.Point{0.0, 0.0},
+		compute.Point{1.0, 1.0},
+		0.001,
+		nil,
+		compute.BasisTypeQuadratic,
+		compute.BuildTypeParallel,
+		0,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("failed to create grid: %v", err)
+	}
+
+	_, err = grid.Evaluate(compute.Point{0.5})
+	if err == nil {
+		t.Fatal("expected error for invalid input dimension, got nil")
+	}
+}
+
+// Тест 6: Проверка ошибки при выходе точки за границы [min, max]
+// Проверяется, что если хотя бы одна координата точки лежит вне допустимого диапазона,
+// метод Evaluate возвращает ошибку.
+func TestEvaluateOutOfBounds(t *testing.T) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{arg[0] + arg[1]}, nil
+	}
+
+	grid, err := compute.NewAdaptiveSparseGrid(
+		funcEval,
+		compute.Point{0.0, 0.0},
+		compute.Point{1.0, 1.0},
+		0.001,
+		nil,
+		compute.BasisTypeQuadratic,
+		compute.BuildTypeParallel,
+		0,
+		0,
+	)
+	if err != nil {
+		t.Fatalf("failed to create grid: %v", err)
+	}
+
+	invalidPoints := []compute.Point{
+		{-0.1, 0.5},
+		{0.5, -0.1},
+		{1.1, 0.5},
+		{0.5, 1.1},
+	}
+
+	for _, point := range invalidPoints {
+		_, err = grid.Evaluate(point)
+		if err == nil {
+			t.Fatalf("expected out of bounds error for point %v, got nil", point)
+		}
+	}
+}
+
 func TestMakeNextIteration(t *testing.T) {
 	g := func(arg compute.Point) (compute.Point, error) {
 		return compute.Point{arg[0] + 1.0}, nil
@@ -249,7 +316,7 @@ func TestMakeNextIteration(t *testing.T) {
 	}
 }
 
-// Тест 6: Тест работы линейного базиса
+// Тест 7: Тест работы линейного базиса
 func TestLinearBasis(t *testing.T) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		return compute.Point{arg[0]*arg[1] + math.Sin(arg[0])}, nil
