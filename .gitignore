@@ -3,6 +3,7 @@
 cmake-*
 build*
 vcpkg_installed
+__pycache__
 
 CMakeLists.txt.user
 CMakeCache.txt

@@ -53,7 +53,7 @@ def run_benchstat_csv(base_path: Path, head_path: Path, alpha: float) -> str:
         str(head_path),
     ]
     completed = subprocess.run(command, check=True, capture_output=True, text=True)
-    return completed.stdout
+    return completed.stdout + completed.stderr
 
 
 def parse_change_percent(raw: str) -> float | None:
@@ -73,6 +73,8 @@ def parse_p_value(raw: str) -> float | None:
     value = raw.strip()
     if not value or value == '~':
         return None
+    if value.startswith('p='):
+        value = value.split()[0][2:]
     try:
         return float(value)
     except ValueError:
@@ -88,25 +90,29 @@ def extract_significance_map(benchstat_csv: str, alpha: float) -> dict[str, dict
             continue
         first_cell = row[0].strip()
         if first_cell == '':
+            if len(row) > 1 and row[1].strip() in {'sec/op', 'B/op', 'allocs/op'}:
+                current_metric = row[1].strip()
             continue
-        if first_cell == '.unit':
-            current_metric = row[1].strip() if len(row) > 1 else ''
+        if first_cell in {'.unit', '.config', 'name', 'geomean', 'goos: darwin', 'goarch: arm64'} or first_cell.startswith('pkg: ') or first_cell.startswith('cpu: '):
             continue
-        if first_cell == '.config' or first_cell == 'name':
+        if first_cell.startswith(('B', 'D', 'F')) and len(row) == 1 and ':' in first_cell:
             continue
         if current_metric != 'sec/op':
             continue
-        if len(row) < 6:
+        if len(row) < 7:
             continue
         benchmark = first_cell
-        p_value = parse_p_value(row[4])
+        if benchmark.startswith('Benchmark'):
+            benchmark = benchmark[len('Benchmark'):]
+        change_raw = row[5].strip()
+        p_value = parse_p_value(row[6])
         significance[benchmark] = {
-            'change': row[3].strip(),
+            'change': change_raw,
             'p': p_value,
             'n1': row[1].strip(),
-            'n2': row[2].strip(),
+            'n2': row[3].strip(),
             'significant': bool(p_value is not None and p_value <= alpha),
-            'change_percent': parse_change_percent(row[3]),
+            'change_percent': parse_change_percent(change_raw),
         }
     return significance
 
@@ -128,7 +134,7 @@ def build_report(base_samples: dict[str, list[float]], head_samples: dict[str, l
         head_mean = geometric_mean(head_values)
         ratio = head_mean / base_mean
         slowdown_percent = (ratio - 1.0) * 100.0
-        significance = significance_map.get(benchmark_name, {})
+        significance = significance_map.get(benchmark_name.replace('Benchmark', ''), {})
         is_regression = slowdown_percent > threshold_percent and bool(significance.get('significant', False))
         comparison = {
             'benchmark': benchmark_name,
