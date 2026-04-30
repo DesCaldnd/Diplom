@@ -66,8 +66,12 @@ class Grid2D {
   Grid2D(this.min, this.max, this.basisType, this.entryPoints, this.nodes);
   Grid2D.fromPB(grid.Grid2D grid2D) : min = Point2D.fromPB(grid2D.min), max = Point2D.fromPB(grid2D.max), basisType = grid2D.basisType == grid.BasisType.LINEAR ? BasisType.linear : BasisType.quadratic
   {
-    grid2D.nodes.forEach((node) => nodes[GridKey2D.fromPB(node.key)] = Node2D.fromPB(node));
-    grid2D.entryPoints.forEach((entryPoint) => entryPoints.add(Node2D.fromPB(entryPoint)));
+    for (var node in grid2D.nodes) {
+      nodes[GridKey2D.fromPB(node.key)] = Node2D.fromPB(node);
+    }
+    for (var entryPoint in grid2D.entryPoints) {
+      entryPoints.add(Node2D.fromPB(entryPoint));
+    }
   }
 
   Point2D evaluate(Point2D point) {

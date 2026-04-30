@@ -7,9 +7,9 @@ import (
 	"log"
 	"net"
 
-	"google.golang.org/grpc"
-	"Diplom/internal/server"
 	pb "Diplom/gridProto"
+	"Diplom/internal/server"
+	"google.golang.org/grpc"
 )
 
 func main() {

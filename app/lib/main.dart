@@ -306,8 +306,9 @@ class _GridScreenState extends State<GridScreen> {
                               ),
                             ],
                             onChanged: (val) {
-                              if (val != null)
+                              if (val != null) {
                                 setState(() => _formulaType = val);
+                              }
                             },
                           ),
                           DropdownButton<pb.BuildType>(
@@ -435,7 +436,7 @@ class GridPainter extends CustomPainter {
 
     final gridPaint =
         Paint()
-          ..color = Colors.grey.withOpacity(0.3)
+          ..color = Colors.grey.withValues(alpha: 0.3)
           ..strokeWidth = 1
           ..style = PaintingStyle.stroke;
 

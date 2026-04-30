@@ -88,7 +88,7 @@ func eval1d(x float64, level int64, index int64, basisType BasisType) float64 {
 	case BasisTypeLinear:
 		result = 1.0 - t
 	case BasisTypeQuadratic:
-		result = 1.0 - t * t
+		result = 1.0 - t*t
 	}
 
 	return result

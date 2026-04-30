@@ -10,6 +10,10 @@ on:
       - 'internal/**'
       - 'gridProto/**'
       - 'proto/**'
+      - 'app/lib/**'
+      - 'app/pubspec.yaml'
+      - 'app/pubspec.lock'
+      - 'app/analysis_options.yaml'
       - '.github/workflows/go-pr-checks.yml'
       - '.github/workflows/release.yml'
       - 'scripts/**'
@@ -29,22 +33,116 @@ concurrency:
   group: go-pr-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  GO_VERSION: '1.26.1'
+  FLUTTER_VERSION: '3.32.0'
+  BENCH_PACKAGE: './compute'
+  BENCH_REGEX: '.'
+  BENCH_COUNT: '5'
+  BENCH_THRESHOLD_PERCENT: '10'
+  BENCH_TIME: '100ms'
+  BENCH_STAT_ALPHA: '0.05'
+  BENCH_BASE_FILE: 'benchmarks-base.txt'
+  BENCH_HEAD_FILE: 'benchmarks-head.txt'
+  BENCH_COMPARE_JSON: 'benchcmp.json'
+  BENCH_COMPARE_MD: 'benchcmp.md'
+
 jobs:
-  tests-and-benchmarks:
+  go-lint:
+    name: Go lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find cmd compute internal -type f -name '*.go')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            exit 0
+          fi
+          unformatted=$(gofmt -l "${files[@]}")
+          if [[ -n "${unformatted}" ]]; then
+            echo 'The following Go files are not formatted:'
+            echo "${unformatted}"
+            exit 1
+          fi
+
+      - name: Run Go vet
+        run: |
+          go vet ./cmd/... ./compute/... ./internal/...
+
+  dart-lint:
+    name: Dart lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install Dart dependencies
+        run: |
+          flutter pub get
+
+      - name: Analyze Dart code
+        run: |
+          dart analyze lib
+
+  go-tests:
+    name: Go tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - go-lint
+      - dart-lint
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run go generate
+        run: |
+          go generate ./...
+
+      - name: Run Go tests
+        run: |
+          go test ./...
+
+  go-benchmarks:
+    name: Go benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    env:
-      GO_VERSION: '1.26.1'
-      BENCH_PACKAGE: './compute'
-      BENCH_REGEX: '.'
-      BENCH_COUNT: '5'
-      BENCH_THRESHOLD_PERCENT: '10'
-      BENCH_TIME: '100ms'
-      BENCH_STAT_ALPHA: '0.05'
-      BENCH_BASE_FILE: 'benchmarks-base.txt'
-      BENCH_HEAD_FILE: 'benchmarks-head.txt'
-      BENCH_COMPARE_JSON: 'benchcmp.json'
-      BENCH_COMPARE_MD: 'benchcmp.md'
+    needs:
+      - go-tests
     steps:
       - name: Checkout PR HEAD
         uses: actions/checkout@v4
@@ -56,14 +154,18 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Setup protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Setup benchstat
         run: |
           go install golang.org/x/perf/cmd/benchstat@latest
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Run Go tests
-        run: |
-          go test ./...
 
       - name: Resolve base ref
         id: refs
@@ -78,11 +180,17 @@ jobs:
             echo "base_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run base benchmarks
+      - name: Run base go generate
         shell: bash
         run: |
           set -euo pipefail
           git checkout --force "${{ steps.refs.outputs.base_sha }}"
+          go generate ./...
+
+      - name: Run base benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
           go test ${{ env.BENCH_PACKAGE }} -run '^$' -bench "${{ env.BENCH_REGEX }}" -benchmem -count "${{ env.BENCH_COUNT }}" -benchtime "${{ env.BENCH_TIME }}" > "${{ env.BENCH_BASE_FILE }}"
 
       - name: Restore PR HEAD
@@ -90,6 +198,12 @@ jobs:
         run: |
           set -euo pipefail
           git checkout --force "${{ github.sha }}"
+
+      - name: Run head go generate
+        shell: bash
+        run: |
+          set -euo pipefail
+          go generate ./...
 
       - name: Run head benchmarks
         shell: bash
