@@ -13,6 +13,7 @@ import (
 	"github.com/expr-lang/expr/vm"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -28,6 +29,20 @@ var (
 			Name:    "grid_request_duration_seconds",
 			Help:    "Time spent processing GetGrid2D requests",
 			Buckets: prometheus.DefBuckets,
+		},
+	)
+	responseNodes = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "grid_response_nodes",
+			Help:    "Number of nodes in the generated grid",
+			Buckets: []float64{10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000},
+		},
+	)
+	responseSizeBytes = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "grid_response_size_bytes",
+			Help:    "Size of the protobuf response in bytes",
+			Buckets: []float64{1024, 10240, 102400, 1048576, 10485760, 52428800}, // 1KB, 10KB, 100KB, 1MB, 10MB, 50MB
 		},
 	)
 )
@@ -52,7 +67,6 @@ func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool)
 	env := map[string]interface{}{
 		"x":     0.0,
 		"y":     0.0,
-		"t":     0.0,
 		"sin":   math.Sin,
 		"cos":   math.Cos,
 		"tan":   math.Tan,
@@ -68,6 +82,10 @@ func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool)
 		"sqrt":  math.Sqrt,
 		"abs":   math.Abs,
 		"pow":   math.Pow,
+	}
+
+	if isDiffur {
+		env["t"] = 0.0
 	}
 
 	progX, err := expr.Compile(formulaX, expr.Env(env))
@@ -104,7 +122,6 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 	env := map[string]interface{}{
 		"x":     x,
 		"y":     y,
-		"t":     0.0,
 		"sin":   math.Sin,
 		"cos":   math.Cos,
 		"tan":   math.Tan,
@@ -350,6 +367,10 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 	}
 
 	response := toPb2D(grid)
+
+	responseNodes.Observe(float64(len(response.Nodes)))
+	responseSizeBytes.Observe(float64(proto.Size(response)))
+
 	requestsTotal.WithLabelValues("success").Inc()
 	return response, nil
 }
