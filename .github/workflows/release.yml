@@ -35,4 +35,4 @@ jobs:
             git checkout master
             git pull
             cd deploy/docker-compose
-            NGINX_TLS_MODE=https sudo docker compose up --build -d
+            sudo docker compose up --build -d
