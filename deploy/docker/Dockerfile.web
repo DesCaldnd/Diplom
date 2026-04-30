@@ -21,7 +21,7 @@ COPY app/ ./
 
 # Получаем зависимости и собираем проект
 RUN flutter pub get
-RUN flutter build web --release
+RUN flutter build web --release --base-href /web/
 
 # Этап 2: Подъем Nginx сервера для раздачи статики
 FROM nginx:alpine

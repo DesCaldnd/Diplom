@@ -1,14 +1,31 @@
-# docker-compose.yml для настройки подъема сервера и nginx
-
 services:
-  # Сервис gRPC сервера
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NGINX_TLS_MODE: ${NGINX_TLS_MODE:-http}
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - server
+      - envoy
+      - grafana
+    networks:
+      - app_network
+    restart: unless-stopped
+
   server:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile
-    container_name: server
-    ports:
-      - "9999:9999"  # Открываем порт для прямого доступа к серверу (опционально)
+    expose:
+      - "9999"
+      - "8080"
     networks:
       - app_network
     restart: unless-stopped
@@ -17,13 +34,13 @@ services:
     image: envoyproxy/envoy:v1.33-latest
     container_name: envoy
     volumes:
-      - ../envoy.yaml:/etc/envoy/envoy.yaml
-    ports:
-      - "9901:9901"
-      - "8082:8082"
+      - ../envoy.yaml:/etc/envoy/envoy.yaml:ro
+    expose:
+      - "8082"
+      - "9901"
     networks:
       - app_network
-    command: [ "-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy" ]
+    command: ["-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy"]
     depends_on:
       - server
     restart: unless-stopped
@@ -33,20 +50,19 @@ services:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.web
     container_name: flutter_web
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     networks:
       - app_network
     restart: unless-stopped
 
-
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
+    expose:
+      - "9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     networks:
       - app_network
     restart: unless-stopped
@@ -54,21 +70,22 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - app_network
     depends_on:
       - prometheus
     restart: unless-stopped
 
-# Определение сети для взаимодействия между сервисами
 volumes:
   grafana_data:
 
