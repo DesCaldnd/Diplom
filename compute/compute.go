@@ -456,7 +456,8 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			for _, anchor := range anchors {
 				if currentNode.isPointInAffectZone(anchor.arg, g.inDim) {
 					evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &activeEntryNode, newNodes)
-					if evalRes.Sub(anchor.ans).Length() >= epsilon {
+					evalRes.Sub(anchor.ans)
+					if evalRes.Length() >= epsilon {
 						canContinue = false
 						affectDirs := getAffectDirection(anchor.arg, currentNode.key.level, currentNode.key.index, g.inDim)
 						for i := int64(0); i < g.inDim; i++ {
@@ -536,7 +537,7 @@ func (g *AdaptiveSparseGrid) evaluateForDimAndEntryPoint(x Point, maxGridDim int
 	interp := g.evaluateForDim(x, maxGridDim)
 	if entryPoint != nil {
 		processedNodes := make(map[string]struct{})
-		interp = interp.Add(g.evaluateRecursive(x, *entryPoint, processedNodes, additionalNodes))
+		interp.Add(g.evaluateRecursive(x, *entryPoint, processedNodes, additionalNodes))
 	}
 	return interp
 }
@@ -572,7 +573,8 @@ func (g *AdaptiveSparseGrid) createNode(
 
 	interp := g.evaluateForDimAndEntryPoint(n.centerUnit, dimension, entryPoint, additionalNodes)
 
-	n.alpha = etalon.Sub(interp)
+	etalon.Sub(interp)
+	n.alpha = etalon
 	additionalNodes[key.String()] = n
 
 	return &key, nil
@@ -580,12 +582,13 @@ func (g *AdaptiveSparseGrid) createNode(
 
 func (g *AdaptiveSparseGrid) evaluateForDim(x Point, maxGridDim int64) Point {
 	answer := make(Point, g.outDim)
+	processedNodes := make(map[string]struct{})
 	for _, ep := range g.entryPoints {
 		if ep.dimensions >= maxGridDim {
 			break
 		}
-		processedNodes := make(map[string]struct{})
-		answer = answer.Add(g.evaluateRecursive(x, ep.node, processedNodes, nil))
+		clear(processedNodes)
+		answer.Add(g.evaluateRecursive(x, ep.node, processedNodes, nil))
 	}
 	return answer
 }
@@ -602,14 +605,15 @@ func (g *AdaptiveSparseGrid) evaluateRecursive(x Point, n node, processedNodes m
 		return make(Point, g.outDim)
 	}
 
-	value := n.alpha.MulScalar(basis)
+	value := n.alpha.Clone()
+	value.MulScalar(basis)
 
 	if n.hasChildren {
 		for i := int64(0); i < g.inDim; i++ {
 			if n.key.level[i] != 0 {
 				child, exists := g.getChildForDimAndArg(n, x, i, additionalNodes)
 				if exists {
-					value = value.Add(g.evaluateRecursive(x, child, processedNodes, additionalNodes))
+					value.Add(g.evaluateRecursive(x, child, processedNodes, additionalNodes))
 				}
 			}
 		}
