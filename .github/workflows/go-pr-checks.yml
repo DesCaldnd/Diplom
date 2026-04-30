@@ -1,0 +1,169 @@
+name: Go PR checks
+
+on:
+  pull_request:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/**'
+      - 'compute/**'
+      - 'internal/**'
+      - 'gridProto/**'
+      - 'proto/**'
+      - '.github/workflows/go-pr-checks.yml'
+      - '.github/workflows/release.yml'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      benchmark_override:
+        description: 'Пропустить падение из-за регрессии бенчмарков >10%'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: go-pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests-and-benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GO_VERSION: '1.26.1'
+      BENCH_PACKAGE: './compute'
+      BENCH_REGEX: '.'
+      BENCH_COUNT: '5'
+      BENCH_THRESHOLD_PERCENT: '10'
+      BENCH_TIME: '100ms'
+      BENCH_STAT_ALPHA: '0.05'
+      BENCH_BASE_FILE: 'benchmarks-base.txt'
+      BENCH_HEAD_FILE: 'benchmarks-head.txt'
+      BENCH_COMPARE_JSON: 'benchcmp.json'
+      BENCH_COMPARE_MD: 'benchcmp.md'
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup benchstat
+        run: |
+          go install golang.org/x/perf/cmd/benchstat@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Run Go tests
+        run: |
+          go test ./...
+
+      - name: Resolve base ref
+        id: refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "base_ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_ref=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "base_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run base benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --force "${{ steps.refs.outputs.base_sha }}"
+          go test ${{ env.BENCH_PACKAGE }} -run '^$' -bench "${{ env.BENCH_REGEX }}" -benchmem -count "${{ env.BENCH_COUNT }}" -benchtime "${{ env.BENCH_TIME }}" > "${{ env.BENCH_BASE_FILE }}"
+
+      - name: Restore PR HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --force "${{ github.sha }}"
+
+      - name: Run head benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test ${{ env.BENCH_PACKAGE }} -run '^$' -bench "${{ env.BENCH_REGEX }}" -benchmem -count "${{ env.BENCH_COUNT }}" -benchtime "${{ env.BENCH_TIME }}" > "${{ env.BENCH_HEAD_FILE }}"
+
+      - name: Compare benchmark results
+        id: benchcmp
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/compare_benchmarks.py \
+            --base "${{ env.BENCH_BASE_FILE }}" \
+            --head "${{ env.BENCH_HEAD_FILE }}" \
+            --threshold-percent "${{ env.BENCH_THRESHOLD_PERCENT }}" \
+            --alpha "${{ env.BENCH_STAT_ALPHA }}" \
+            --json-output "${{ env.BENCH_COMPARE_JSON }}" \
+            --markdown-output "${{ env.BENCH_COMPARE_MD }}"
+          cat "${{ env.BENCH_COMPARE_MD }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-benchmark-results
+          path: |
+            ${{ env.BENCH_BASE_FILE }}
+            ${{ env.BENCH_HEAD_FILE }}
+            ${{ env.BENCH_COMPARE_JSON }}
+            ${{ env.BENCH_COMPARE_MD }}
+
+      - name: Comment benchmark summary to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          BENCH_COMPARE_MD: ${{ env.BENCH_COMPARE_MD }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync(process.env.BENCH_COMPARE_MD, 'utf8');
+            const marker = '<!-- go-benchmark-report -->';
+            const fullBody = `${marker}\n${body}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: fullBody,
+              });
+            }
+
+      - name: Enforce benchmark regression threshold
+        shell: bash
+        env:
+          BENCH_OVERRIDE: ${{ github.event.inputs.benchmark_override || 'false' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/enforce_benchmark_gate.py \
+            --json "${{ env.BENCH_COMPARE_JSON }}" \
+            --override "${BENCH_OVERRIDE}"
