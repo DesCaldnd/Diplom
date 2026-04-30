@@ -1,8 +1,9 @@
 package compute
 
 import (
-	"fmt"
+	"encoding/binary"
 	"math"
+	"unsafe"
 )
 
 type BasisType int64
@@ -27,7 +28,22 @@ type gridKey struct {
 }
 
 func (k gridKey) String() string {
-	return fmt.Sprintf("%v|%v", k.level, k.index)
+	totalLength := (len(k.level) + len(k.index)) * 8
+	result := make([]byte, totalLength)
+
+	pos := 0
+
+	for _, v := range k.level {
+		binary.LittleEndian.PutUint64(result[pos:], uint64(v))
+		pos += 8
+	}
+
+	for _, v := range k.index {
+		binary.LittleEndian.PutUint64(result[pos:], uint64(v))
+		pos += 8
+	}
+
+	return unsafe.String(&result[0], len(result))
 }
 
 type node struct {
