@@ -4,6 +4,7 @@ cmake-*
 build*
 vcpkg_installed
 __pycache__
+deploy/docker-compose/certs
 
 CMakeLists.txt.user
 CMakeCache.txt
