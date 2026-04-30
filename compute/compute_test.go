@@ -11,10 +11,39 @@ import (
 // Простой интегратор методом Рунге-Кутты 4-го порядка
 func rk4Step(f func(compute.Point, float64) compute.Point, x compute.Point, t float64, dt float64) compute.Point {
 	k1 := f(x, t)
-	k2 := f(x.Add(k1.MulScalar(dt/2.0)), t+dt/2.0)
-	k3 := f(x.Add(k2.MulScalar(dt/2.0)), t+dt/2.0)
-	k4 := f(x.Add(k3.MulScalar(dt)), t+dt)
-	return x.Add(k1.Add(k2.MulScalar(2.0)).Add(k3.MulScalar(2.0)).Add(k4).MulScalar(dt / 6.0))
+
+	x1 := x.Clone()
+	k1_half := k1.Clone()
+	k1_half.MulScalar(dt / 2.0)
+	x1.Add(k1_half)
+	k2 := f(x1, t+dt/2.0)
+
+	x2 := x.Clone()
+	k2_half := k2.Clone()
+	k2_half.MulScalar(dt / 2.0)
+	x2.Add(k2_half)
+	k3 := f(x2, t+dt/2.0)
+
+	x3 := x.Clone()
+	k3_dt := k3.Clone()
+	k3_dt.MulScalar(dt)
+	x3.Add(k3_dt)
+	k4 := f(x3, t+dt)
+
+	res := x.Clone()
+	k1_copy := k1.Clone()
+	k2_copy := k2.Clone()
+	k2_copy.MulScalar(2.0)
+	k3_copy := k3.Clone()
+	k3_copy.MulScalar(2.0)
+
+	k1_copy.Add(k2_copy)
+	k1_copy.Add(k3_copy)
+	k1_copy.Add(k4)
+	k1_copy.MulScalar(dt / 6.0)
+
+	res.Add(k1_copy)
+	return res
 }
 
 func integrateRk4(f func(compute.Point, float64) compute.Point, x0 compute.Point, t0 float64, t1 float64, steps int) compute.Point {

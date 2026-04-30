@@ -6,36 +6,34 @@ type ScalarType = float64
 
 type Point []ScalarType
 
-func (p Point) Add(other Point) Point {
+func (p Point) Clone() Point {
 	res := make(Point, len(p))
-	for i := range p {
-		res[i] = p[i] + other[i]
-	}
+	copy(res, p)
 	return res
 }
 
-func (p Point) Sub(other Point) Point {
-	res := make(Point, len(p))
+func (p Point) Add(other Point) {
 	for i := range p {
-		res[i] = p[i] - other[i]
+		p[i] += other[i]
 	}
-	return res
 }
 
-func (p Point) Mul(other Point) Point {
-	res := make(Point, len(p))
+func (p Point) Sub(other Point) {
 	for i := range p {
-		res[i] = p[i] * other[i]
+		p[i] -= other[i]
 	}
-	return res
 }
 
-func (p Point) MulScalar(s ScalarType) Point {
-	res := make(Point, len(p))
+func (p Point) Mul(other Point) {
 	for i := range p {
-		res[i] = p[i] * s
+		p[i] *= other[i]
 	}
-	return res
+}
+
+func (p Point) MulScalar(s ScalarType) {
+	for i := range p {
+		p[i] *= s
+	}
 }
 
 func (p Point) Length() ScalarType {

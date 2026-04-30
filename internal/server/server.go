@@ -4,76 +4,77 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"Diplom/compute"
 	pb "Diplom/gridProto"
 
-	"github.com/Knetic/govaluate"
+	"github.com/expr-lang/expr"
+	"github.com/expr-lang/expr/vm"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	requestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "grid_requests_total",
+			Help: "Total number of requests to GetGrid2D",
+		},
+		[]string{"status"},
+	)
+	requestDuration = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "grid_request_duration_seconds",
+			Help:    "Time spent processing GetGrid2D requests",
+			Buckets: prometheus.DefBuckets,
+		},
+	)
 )
 
 type Formula struct {
 	dt       compute.ScalarType
 	isDiffur bool
-	exprX    *govaluate.EvaluableExpression
-	exprY    *govaluate.EvaluableExpression
+	progX    *vm.Program
+	progY    *vm.Program
 	tBegin   compute.ScalarType
 	tEnd     compute.ScalarType
 }
 
 func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool) (*Formula, error) {
-	functions := map[string]govaluate.ExpressionFunction{
-		"sin": func(args ...interface{}) (interface{}, error) {
-			return math.Sin(args[0].(float64)), nil
-		},
-		"cos": func(args ...interface{}) (interface{}, error) {
-			return math.Cos(args[0].(float64)), nil
-		},
-		"tan": func(args ...interface{}) (interface{}, error) {
-			return math.Tan(args[0].(float64)), nil
-		},
-		"asin": func(args ...interface{}) (interface{}, error) {
-			return math.Asin(args[0].(float64)), nil
-		},
-		"acos": func(args ...interface{}) (interface{}, error) {
-			return math.Acos(args[0].(float64)), nil
-		},
-		"atan": func(args ...interface{}) (interface{}, error) {
-			return math.Atan(args[0].(float64)), nil
-		},
-		"sinh": func(args ...interface{}) (interface{}, error) {
-			return math.Sinh(args[0].(float64)), nil
-		},
-		"cosh": func(args ...interface{}) (interface{}, error) {
-			return math.Cosh(args[0].(float64)), nil
-		},
-		"tanh": func(args ...interface{}) (interface{}, error) {
-			return math.Tanh(args[0].(float64)), nil
-		},
-		"exp": func(args ...interface{}) (interface{}, error) {
-			return math.Exp(args[0].(float64)), nil
-		},
-		"log": func(args ...interface{}) (interface{}, error) {
-			return math.Log(args[0].(float64)), nil
-		},
-		"log10": func(args ...interface{}) (interface{}, error) {
-			return math.Log10(args[0].(float64)), nil
-		},
-		"sqrt": func(args ...interface{}) (interface{}, error) {
-			return math.Sqrt(args[0].(float64)), nil
-		},
-		"abs": func(args ...interface{}) (interface{}, error) {
-			return math.Abs(args[0].(float64)), nil
-		},
-		"pow": func(args ...interface{}) (interface{}, error) {
-			return math.Pow(args[0].(float64), args[1].(float64)), nil
-		},
+	if dt < 0.001 {
+		dt = 0.001
+	}
+	if dt > 0.1 {
+		dt = 0.1
 	}
 
-	exprX, err := govaluate.NewEvaluableExpressionWithFunctions(formulaX, functions)
+	env := map[string]interface{}{
+		"x":     0.0,
+		"y":     0.0,
+		"t":     0.0,
+		"sin":   math.Sin,
+		"cos":   math.Cos,
+		"tan":   math.Tan,
+		"asin":  math.Asin,
+		"acos":  math.Acos,
+		"atan":  math.Atan,
+		"sinh":  math.Sinh,
+		"cosh":  math.Cosh,
+		"tanh":  math.Tanh,
+		"exp":   math.Exp,
+		"log":   math.Log,
+		"log10": math.Log10,
+		"sqrt":  math.Sqrt,
+		"abs":   math.Abs,
+		"pow":   math.Pow,
+	}
+
+	progX, err := expr.Compile(formulaX, expr.Env(env))
 	if err != nil {
 		return nil, err
 	}
-	exprY, err := govaluate.NewEvaluableExpressionWithFunctions(formulaY, functions)
+	progY, err := expr.Compile(formulaY, expr.Env(env))
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +82,8 @@ func NewFormula(formulaX, formulaY string, dt compute.ScalarType, isDiffur bool)
 	return &Formula{
 		dt:       dt,
 		isDiffur: isDiffur,
-		exprX:    exprX,
-		exprY:    exprY,
+		progX:    progX,
+		progY:    progY,
 	}, nil
 }
 
@@ -100,27 +101,51 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 	x := arg[0]
 	y := arg[1]
 
-	parameters := make(map[string]interface{}, 8)
+	env := map[string]interface{}{
+		"x":     x,
+		"y":     y,
+		"t":     0.0,
+		"sin":   math.Sin,
+		"cos":   math.Cos,
+		"tan":   math.Tan,
+		"asin":  math.Asin,
+		"acos":  math.Acos,
+		"atan":  math.Atan,
+		"sinh":  math.Sinh,
+		"cosh":  math.Cosh,
+		"tanh":  math.Tanh,
+		"exp":   math.Exp,
+		"log":   math.Log,
+		"log10": math.Log10,
+		"sqrt":  math.Sqrt,
+		"abs":   math.Abs,
+		"pow":   math.Pow,
+	}
 
 	toFloat64 := func(value interface{}) (float64, error) {
-		result, ok := value.(float64)
-		if !ok {
+		switch v := value.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		case int64:
+			return float64(v), nil
+		default:
 			return 0, fmt.Errorf("unexpected evaluation result type %T", value)
 		}
-		return result, nil
 	}
 
 	if f.isDiffur {
 		getDerivatives := func(curX, curY float64, t float64) (float64, float64, error) {
-			parameters["x"] = curX
-			parameters["y"] = curY
-			parameters["t"] = t
+			env["x"] = curX
+			env["y"] = curY
+			env["t"] = t
 
-			resX, err := f.exprX.Evaluate(parameters)
+			resX, err := vm.Run(f.progX, env)
 			if err != nil {
 				return 0, 0, err
 			}
-			resY, err := f.exprY.Evaluate(parameters)
+			resY, err := vm.Run(f.progY, env)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -137,35 +162,87 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 			return dx, dy, nil
 		}
 
-		for t := f.tBegin; t <= f.tEnd; t += f.dt {
-			dx1, dy1, err := getDerivatives(x, y, t)
-			if err != nil {
-				return zeroPoint, err
+		// Адаптивный шаг Рунге-Кутты-Фельберга (RK45)
+		t := f.tBegin
+		dt := f.dt
+		tol := 1e-6 // Допустимая погрешность
+
+		for t < f.tEnd {
+			if t+dt > f.tEnd {
+				dt = f.tEnd - t
 			}
-			dx2, dy2, err := getDerivatives(x+dx1*f.dt/2, y+dy1*f.dt/2, t)
-			if err != nil {
-				return zeroPoint, err
-			}
-			dx3, dy3, err := getDerivatives(x+dx2*f.dt/2, y+dy2*f.dt/2, t)
-			if err != nil {
-				return zeroPoint, err
-			}
-			dx4, dy4, err := getDerivatives(x+dx3*f.dt, y+dy3*f.dt, t)
+
+			// Коэффициенты для RK45 (Cash-Karp)
+			k1x, k1y, err := getDerivatives(x, y, t)
 			if err != nil {
 				return zeroPoint, err
 			}
 
-			x += (f.dt / 6) * (dx1 + dx2*2 + dx3*2 + dx4)
-			y += (f.dt / 6) * (dy1 + dy2*2 + dy3*2 + dy4)
+			k2x, k2y, err := getDerivatives(x+dt*(1.0/5.0)*k1x, y+dt*(1.0/5.0)*k1y, t+dt*(1.0/5.0))
+			if err != nil {
+				return zeroPoint, err
+			}
+
+			k3x, k3y, err := getDerivatives(x+dt*(3.0/40.0)*k1x+dt*(9.0/40.0)*k2x, y+dt*(3.0/40.0)*k1y+dt*(9.0/40.0)*k2y, t+dt*(3.0/10.0))
+			if err != nil {
+				return zeroPoint, err
+			}
+
+			k4x, k4y, err := getDerivatives(x+dt*(3.0/10.0)*k1x-dt*(9.0/10.0)*k2x+dt*(6.0/5.0)*k3x, y+dt*(3.0/10.0)*k1y-dt*(9.0/10.0)*k2y+dt*(6.0/5.0)*k3y, t+dt*(3.0/5.0))
+			if err != nil {
+				return zeroPoint, err
+			}
+
+			k5x, k5y, err := getDerivatives(x-dt*(11.0/54.0)*k1x+dt*(5.0/2.0)*k2x-dt*(70.0/27.0)*k3x+dt*(35.0/27.0)*k4x, y-dt*(11.0/54.0)*k1y+dt*(5.0/2.0)*k2y-dt*(70.0/27.0)*k3y+dt*(35.0/27.0)*k4y, t+dt)
+			if err != nil {
+				return zeroPoint, err
+			}
+
+			k6x, k6y, err := getDerivatives(x+dt*(1631.0/55296.0)*k1x+dt*(175.0/512.0)*k2x+dt*(575.0/13824.0)*k3x+dt*(44275.0/110592.0)*k4x+dt*(253.0/4096.0)*k5x, y+dt*(1631.0/55296.0)*k1y+dt*(175.0/512.0)*k2y+dt*(575.0/13824.0)*k3y+dt*(44275.0/110592.0)*k4y+dt*(253.0/4096.0)*k5y, t+dt*(7.0/8.0))
+			if err != nil {
+				return zeroPoint, err
+			}
+
+			// Решение 5-го порядка
+			x5 := x + dt*((37.0/378.0)*k1x+(250.0/621.0)*k3x+(125.0/594.0)*k4x+(512.0/1771.0)*k6x)
+			y5 := y + dt*((37.0/378.0)*k1y+(250.0/621.0)*k3y+(125.0/594.0)*k4y+(512.0/1771.0)*k6y)
+
+			// Решение 4-го порядка
+			x4 := x + dt*((2825.0/27648.0)*k1x+(18575.0/48384.0)*k3x+(13525.0/55296.0)*k4x+(277.0/14336.0)*k5x+(1.0/4.0)*k6x)
+			y4 := y + dt*((2825.0/27648.0)*k1y+(18575.0/48384.0)*k3y+(13525.0/55296.0)*k4y+(277.0/14336.0)*k5y+(1.0/4.0)*k6y)
+
+			// Оценка ошибки
+			errX := math.Abs(x5 - x4)
+			errY := math.Abs(y5 - y4)
+			maxErr := math.Max(errX, errY)
+
+			if maxErr <= tol {
+				// Шаг успешен
+				t += dt
+				x = x5
+				y = y5
+			}
+
+			// Адаптация шага
+			if maxErr == 0 {
+				dt *= 2.0
+			} else {
+				dt *= 0.9 * math.Pow(tol/maxErr, 0.2)
+			}
+
+			// Ограничения на шаг
+			if dt < 1e-5 {
+				dt = 1e-5
+			} else if dt > f.dt*10 {
+				dt = f.dt * 10
+			}
 		}
 	} else {
-		parameters["x"] = x
-		parameters["y"] = y
-		resX, err := f.exprX.Evaluate(parameters)
+		resX, err := vm.Run(f.progX, env)
 		if err != nil {
 			return zeroPoint, err
 		}
-		resY, err := f.exprY.Evaluate(parameters)
+		resY, err := vm.Run(f.progY, env)
 		if err != nil {
 			return zeroPoint, err
 		}
@@ -187,11 +264,17 @@ type GridServer struct {
 }
 
 func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.Grid2D, error) {
+	start := time.Now()
+	defer func() {
+		requestDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	min := compute.Point{req.Min.X, req.Min.Y}
 	max := compute.Point{req.Max.X, req.Max.Y}
 
 	formula, err := NewFormula(req.FormulaX, req.FormulaY, req.Eps, req.FormulaType == pb.FormulaType_DIFFUR)
 	if err != nil {
+		requestsTotal.WithLabelValues("error").Inc()
 		return nil, err
 	}
 
@@ -229,6 +312,7 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		req.MaxNodesInDim,
 	)
 	if err != nil {
+		requestsTotal.WithLabelValues("error").Inc()
 		return nil, err
 	}
 
@@ -245,11 +329,13 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 			req.MaxNodesInDim,
 		)
 		if err != nil {
+			requestsTotal.WithLabelValues("error").Inc()
 			return nil, err
 		}
 	}
 
 	response := toPb2D(grid)
+	requestsTotal.WithLabelValues("success").Inc()
 	return response, nil
 }
 

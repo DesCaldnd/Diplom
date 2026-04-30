@@ -6,14 +6,27 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 
 	pb "Diplom/gridProto"
 	"Diplom/internal/server"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 )
 
 func main() {
 	fmt.Println("Starting server...")
+
+	// Запуск HTTP сервера для pprof и Prometheus метрик
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		fmt.Println("Starting HTTP server for metrics and pprof on :8080")
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			log.Fatalf("failed to serve http: %v", err)
+		}
+	}()
+
 	lis, err := net.Listen("tcp", ":9999")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
