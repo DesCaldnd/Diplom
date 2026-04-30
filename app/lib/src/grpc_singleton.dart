@@ -1,6 +1,5 @@
 import 'package:grpc/grpc_or_grpcweb.dart';
 import 'package:app/src/generated/grid.pbgrpc.dart';
-import 'package:app/src/generated/grid.pb.dart';
 
 class ComputeService {
   final GrpcOrGrpcWebClientChannel channel;
