@@ -23,9 +23,9 @@ services:
         fi;
         exec nginx -g 'daemon off;'
     depends_on:
-      - web
-      - server
-      - envoy
+      # - web
+      # - server
+      # - envoy
       - grafana
     networks:
       - app_network
@@ -88,7 +88,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_SERVER_DOMAIN: diplom.funandchecks.ru
       GF_SERVER_ROOT_URL: https://diplom.funandchecks.ru/grafana/
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
