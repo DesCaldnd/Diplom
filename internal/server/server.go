@@ -278,6 +278,13 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		return nil, err
 	}
 
+	select {
+	case <-ctx.Done():
+		requestsTotal.WithLabelValues("canceled").Inc()
+		return nil, ctx.Err()
+	default:
+	}
+
 	step := 1.0
 	if req.Step != nil {
 		step = *req.Step
@@ -312,7 +319,11 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		req.MaxNodesInDim,
 	)
 	if err != nil {
-		requestsTotal.WithLabelValues("error").Inc()
+		if ctx.Err() != nil {
+			requestsTotal.WithLabelValues("canceled").Inc()
+		} else {
+			requestsTotal.WithLabelValues("error").Inc()
+		}
 		return nil, err
 	}
 
@@ -329,7 +340,11 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 			req.MaxNodesInDim,
 		)
 		if err != nil {
-			requestsTotal.WithLabelValues("error").Inc()
+			if ctx.Err() != nil {
+				requestsTotal.WithLabelValues("canceled").Inc()
+			} else {
+				requestsTotal.WithLabelValues("error").Inc()
+			}
 			return nil, err
 		}
 	}

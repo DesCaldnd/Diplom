@@ -105,10 +105,32 @@
             "uid": "Prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(grid_requests_total[1m])) by (status)",
-          "legendFormat": "{{status}}",
+          "expr": "sum(rate(grid_requests_total{status=\"success\"}[1m]))",
+          "legendFormat": "Success",
           "range": true,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(grid_requests_total{status=\"error\"}[1m]))",
+          "legendFormat": "Error",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "Prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(grid_requests_total{status=\"canceled\"}[1m]))",
+          "legendFormat": "Canceled",
+          "range": true,
+          "refId": "C"
         }
       ],
       "title": "RPS (Requests Per Second)",
