@@ -35,7 +35,7 @@ concurrency:
 
 env:
   GO_VERSION: '1.26.1'
-  FLUTTER_VERSION: '3.29.3'
+  FLUTTER_VERSION: '3.32.0'
   BENCH_PACKAGE: './compute'
   BENCH_REGEX: '.'
   BENCH_COUNT: '5'
@@ -65,11 +65,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          files=$(find cmd compute internal -type f -name '*.go')
-          if [[ -z "${files}" ]]; then
+          mapfile -t files < <(find cmd compute internal -type f -name '*.go')
+          if [[ ${#files[@]} -eq 0 ]]; then
             exit 0
           fi
-          unformatted=$(gofmt -l ${files})
+          unformatted=$(gofmt -l "${files[@]}")
           if [[ -n "${unformatted}" ]]; then
             echo 'The following Go files are not formatted:'
             echo "${unformatted}"
