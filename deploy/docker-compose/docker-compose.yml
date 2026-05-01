@@ -23,9 +23,8 @@ services:
         fi;
         exec nginx -g 'daemon off;'
     depends_on:
-      # - web
-      # - server
-      # - envoy
+      - web
+      - server
       - grafana
     networks:
       - app_network
@@ -48,8 +47,9 @@ services:
     volumes:
       - ../envoy.yaml:/etc/envoy/envoy.yaml:ro
     expose:
-      - "8082"
       - "9901"
+    ports:
+      - "8082:8082"
     networks:
       - app_network
     command: ["-c", "/etc/envoy/envoy.yaml", "--service-cluster", "grpc-web-proxy"]

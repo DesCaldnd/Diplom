@@ -8,13 +8,12 @@ class ComputeService {
 
   static ComputeService? _service;
 
-  ComputeService._internal() : channel = GrpcOrGrpcWebClientChannel.toSeparateEndpoints(
-      grpcHost: "diplom.funandchecks.ru/api",
+  ComputeService._internal() : channel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
+      host: "diplom.funandchecks.ru",
       grpcPort: 443,
       grpcTransportSecure: true,
-      grpcWebHost: "diplom.funandchecks.ru/envoy",
-      grpcWebPort: 443,
-      grpcWebTransportSecure: true) {
+      grpcWebPort: 8082,
+      grpcWebTransportSecure: false) {
     gridClient = GridServiceClient(
       channel,
     );

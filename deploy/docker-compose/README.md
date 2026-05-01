@@ -11,8 +11,8 @@
 Внешние запросы идут через [`nginx`](deploy/nginx/nginx.conf):
 - `/` -> редирект на `/web/`
 - `/web/` -> `web:80`
-- `/api/...` -> gRPC на `server:9999`
-- `/envoy/` -> `envoy:8082`
+- `/grpc/grid.GridService/GetGrid2D` -> прямой gRPC в `server:9999`
+- `/grpc-web/grid.GridService/GetGrid2D` -> gRPC-Web через `envoy:8082`
 - `/envoy-adm/` -> `envoy:9901`
 - `/grafana/` -> `grafana:3000`
 
