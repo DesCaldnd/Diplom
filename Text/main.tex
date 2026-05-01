@@ -1,0 +1,90 @@
+\documentclass{includes/Thesis}
+
+\usepackage{enumitem}
+\usepackage{amssymb}
+\usepackage{qrcode}
+\urlstyle{same}
+
+% Список первого уровня (itemize)
+\setlist[itemize,1]{
+    label=\textbullet,
+    leftmargin=1.75cm,
+    itemsep=0\baselineskip,
+    topsep=0\baselineskip
+}
+
+% Список второго уровня (itemize)
+\setlist[itemize,2]{
+    label=$\circ$,
+    leftmargin=1.75cm,
+    itemsep=0\baselineskip,
+    topsep=0\baselineskip
+}
+
+% Список третьего уровня (itemize)
+\setlist[itemize,3]{
+    label=\scalebox{0.6}{$\blacksquare$},
+    leftmargin=1.75cm,
+    itemsep=0\baselineskip,
+    topsep=0\baselineskip
+}
+
+\sloppy
+
+\addbibresource{parts/refs.bib}
+
+\DeclareFieldFormat{title}{#1}
+\DeclareFieldFormat{journaltitle}{#1}
+\DeclareFieldFormat{issuetitle}{#1}
+\DeclareFieldFormat{maintitle}{#1}
+\DeclareFieldFormat{booktitle}{#1}
+
+\renewcommand*{\mkbibnamefamily}[1]{\textnormal{#1}}
+\renewcommand*{\mkbibnamegiven}[1]{\textnormal{#1}}
+\renewcommand*{\mkbibnameprefix}[1]{\textnormal{#1}}
+\renewcommand*{\mkbibnamesuffix}[1]{\textnormal{#1}}
+
+\DeclareFieldFormat{editortype}{\textnormal{#1}}
+
+\AtBeginBibliography{
+    \let\itshape\relax
+    \let\slshape\relax
+}
+
+\AtBeginDocument{
+    \renewcommand{\contentsname}{СОДЕРЖАНИЕ}
+}
+
+\begin{thesis}[
+        institute = ФЕДЕРАЛЬНОЕ ГОСУДАРСТВЕННОЕ АВТОНОМНОЕ ОБРАЗОВАТЕЛЬНОЕ УЧРЕЖДЕНИЕ ВЫСШЕГО ОБРАЗОВАНИЯ «МОСКОВСКИЙ АВИАЦИОННЫЙ ИНСТИТУТ (НАЦИОНАЛЬНЫЙ ИССЛЕДОВАТЕЛЬСКИЙ УНИВЕРСИТЕТ)»,
+        faculty = Компьютерные науки и прикладная математика,
+        title = Реализация параллельных алгоритмов интерполяции на основе разреженных сеток с квадратичным базисом,
+        year = 2026,
+        authorGroup = {М8О-411Б-22},
+        educationalProgram = 02.03.02 «Фундаментальная информатика и информационные технологии»,
+        authorName = И. Н. Ивкович,
+        academicTeacherTitle = {Доктор физико-математических наук, доцент},
+        academicTeacherName = А. Ю. Морозов,
+        academicSupervisorTitle = {Руководитель образовательной программы},
+        academicSupervisorName = С. С. Крылов,
+        isAcademic,
+        UDC = 519.6,
+        keywordsRu={РАЗРЕЖЕННЫЕ СЕТКИ; ИНТЕРПОЛЯЦИЯ; КВАДРАТИЧНЫЙ БАЗИС; ПАРАЛЛЕЛЬНЫЕ АЛГОРИТМЫ; ЧИСЛЕННЫЕ МЕТОДЫ; ДИФФЕРЕНЦИАЛЬНЫЕ УРАВНЕНИЯ; GO; FLUTTER},
+        keywordsEn={SPARSE GRIDS; INTERPOLATION; QUADRATIC BASIS; PARALLEL ALGORITHMS; NUMERICAL METHODS; DIFFERENTIAL EQUATIONS; GO; FLUTTER},
+    ]
+    \setAbstractResource{parts/abstract-ru}{parts/abstract-en}
+
+    \setTerminologyResource{parts/terminology}
+
+    \setIntroResource{parts/intro}
+
+    \addChapter{АРХИТЕКТУРА ПРОГРАММНОГО КОМПЛЕКСА И МАТЕМАТИЧЕСКИЕ ОСНОВЫ МЕТОДА РАЗРЕЖЕННЫХ СЕТОК}{parts/chapter1}
+    \addChapter{ПРОЕКТИРОВАНИЕ АРХИТЕКТУРЫ И СТРУКТУР ДАННЫХ ПРОГРАММНОГО КОМПЛЕКСА}{parts/chapter2}
+    \addChapter{РЕАЛИЗАЦИЯ ПАРАЛЛЕЛЬНЫХ АЛГОРИТМОВ, АНАЛИЗ РЕЗУЛЬТАТОВ И ПОДГОТОВКА ИЛЛЮСТРАЦИЙ}{parts/chapter3}
+    \addChapter{ОБОБЩЕНИЕ РЕЗУЛЬТАТОВ И НАПРАВЛЕНИЯ ДАЛЬНЕЙШЕГО РАЗВИТИЯ}{parts/chapter4}
+
+    \setConclusionResource{parts/conclusion}
+
+    \addAppendix{Репозиторий с исходным кодом}{parts/appendix_a}
+
+\end{thesis}
