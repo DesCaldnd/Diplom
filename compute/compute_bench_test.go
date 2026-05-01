@@ -1,6 +1,7 @@
 package compute_test
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"testing"
@@ -8,90 +9,183 @@ import (
 	"Diplom/compute"
 )
 
+func buildGridNoError(
+	b *testing.B,
+	funcEval func(compute.Point) (compute.Point, error),
+	min, max compute.Point,
+	epsilon float64,
+	anchors []compute.Point,
+	basis compute.BasisType,
+	buildType compute.BuildType,
+	maxLevel int64,
+	maxNodes int64,
+) *compute.AdaptiveSparseGrid {
+	b.Helper()
+	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, anchors, basis, buildType, maxLevel, maxNodes)
+	if err != nil {
+		b.Fatalf("failed to build grid: %v", err)
+	}
+	return grid
+}
+
+func makeSmoothFunction(dim int) func(compute.Point) (compute.Point, error) {
+	return func(arg compute.Point) (compute.Point, error) {
+		res := 0.0
+		for i := 0; i < dim; i++ {
+			freq := float64(i + 1)
+			res += math.Sin(freq*arg[i]) * math.Cos(arg[i]/(freq+1.0))
+		}
+		return compute.Point{res}, nil
+	}
+}
+
+func makeDomain(dim int, scale float64) (compute.Point, compute.Point) {
+	min := make(compute.Point, dim)
+	max := make(compute.Point, dim)
+	for i := 0; i < dim; i++ {
+		min[i] = 0.0
+		max[i] = scale * math.Pi
+	}
+	return min, max
+}
+
 // ============================================================================
 // БЕНЧМАРКИ
 // ============================================================================
 
-// Бенчмарк 1: Замеры простых функций разной размерности
-// Проверяется время построения сетки для функций 1D, 2D и 3D.
-func BenchmarkSimpleFunctionsDifferentDimensions(b *testing.B) {
-	func1d := func(arg compute.Point) (compute.Point, error) { return compute.Point{math.Sin(arg[0])}, nil }
-	func2d := func(arg compute.Point) (compute.Point, error) {
-		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1])}, nil
+// Бенчмарк 1: зависимость времени построения от размерности и размера области.
+func BenchmarkDomainScalingDifferentDimensions(b *testing.B) {
+	scales := []float64{1.0, 2.0, 4.0}
+	dimensions := []int{1, 2, 3}
+
+	for _, dim := range dimensions {
+		funcEval := makeSmoothFunction(dim)
+		for _, scale := range scales {
+			min, max := makeDomain(dim, scale)
+			name := fmt.Sprintf("dim_%d_scale_%.0fpi", dim, scale)
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+					if err != nil {
+						b.Fatalf("failed to create grid: %v", err)
+					}
+				}
+			})
+		}
 	}
-	func3d := func(arg compute.Point) (compute.Point, error) {
-		return compute.Point{math.Sin(arg[0]) * math.Cos(arg[1]) * math.Sin(arg[2])}, nil
-	}
-
-	b.Run("1D", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func1d, compute.Point{0.0}, compute.Point{math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
-
-	b.Run("2D", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func2d, compute.Point{0.0, 0.0}, compute.Point{math.Pi, math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
-
-	b.Run("3D", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(func3d, compute.Point{0.0, 0.0, 0.0}, compute.Point{math.Pi, math.Pi, math.Pi}, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
 }
 
-// Бенчмарк 2: Сравнения на одинаковых параметрах с разным build_type, basis_type
-// Проверяется время построения сетки для 2D функции при SEQUENTIAL vs PARALLEL
-// и LINEAR vs QUADRATIC базисах.
-func BenchmarkBuildTypeAndBasisTypeComparison(b *testing.B) {
+// Бенчмарк 2: сравнение последовательного и параллельного построения для нетривиальной 2D функции.
+func BenchmarkParallelVsSequentialBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
-		return compute.Point{math.Sin(arg[0]*2.0) * math.Cos(arg[1]*2.0)}, nil
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{math.Sin(3*x)*math.Cos(25*y)}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
-	max := compute.Point{1.0, 1.0}
-	epsilon := 0.001
+	max := compute.Point{2.0 * math.Pi, 2.0 * math.Pi}
 
-	b.Run("Sequential_Quadratic", func(b *testing.B) {
+	for _, basis := range []compute.BasisType{compute.BasisTypeLinear, compute.BasisTypeQuadratic} {
+		basisName := "linear"
+		if basis == compute.BasisTypeQuadratic {
+			basisName = "quadratic"
+		}
+
+		b.Run("sequential_"+basisName, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, basis, compute.BuildTypeSequential, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
+			}
+		})
+
+		b.Run("parallel_"+basisName, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, basis, compute.BuildTypeParallel, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Бенчмарк 3: прямое сравнение линейного и квадратичного базисов при разных значениях epsilon.
+func BenchmarkLinearVsQuadraticBasis(b *testing.B) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{math.Sin(2*x) * math.Cos(3*y)}, nil
+	}
+
+	min := compute.Point{0.0, 0.0}
+	max := compute.Point{math.Pi, math.Pi}
+	epsValues := []float64{1e-2, 5e-3, 1e-3}
+
+	for _, eps := range epsValues {
+		b.Run("linear_eps_"+strconv.FormatFloat(eps, 'g', -1, 64), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, eps, nil, compute.BasisTypeLinear, compute.BuildTypeParallel, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
+			}
+		})
+
+		b.Run("quadratic_eps_"+strconv.FormatFloat(eps, 'g', -1, 64), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, eps, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Бенчмарк 4: влияние anchor points на функцию, которая обманывает базовый критерий адаптации.
+func BenchmarkAnchorPointsImpact(b *testing.B) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return compute.Point{math.Sin(arg[0])}, nil
+	}
+
+	min := compute.Point{0.0}
+	max := compute.Point{4.0 * math.Pi}
+	anchors := []compute.Point{{math.Pi}, {3.0 * math.Pi}}
+
+	b.Run("without_anchor_points", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, 0)
+			_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			if err != nil {
+				b.Fatalf("failed to create grid: %v", err)
+			}
 		}
 	})
 
-	b.Run("Parallel_Quadratic", func(b *testing.B) {
+	b.Run("with_anchor_points", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
-		}
-	})
-
-	b.Run("Sequential_Linear", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeSequential, 0, 0)
-		}
-	})
-
-	b.Run("Parallel_Linear", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeLinear, compute.BuildTypeParallel, 0, 0)
+			_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, anchors, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+			if err != nil {
+				b.Fatalf("failed to create grid: %v", err)
+			}
 		}
 	})
 }
 
-// Бенчмарк 3: Сравнения дифференциальных уравнений
-// Проверяется два подхода к интерполяции решения диффура на отрезке времени [0, 2]:
-// 1. t - это интервальная неопределенность (дополнительная размерность сетки).
-// 2. Последовательное интегрирование при помощи make_next_iteration (t=1, затем t=2).
+// Бенчмарк 5: сравнение двух способов работы с дифференциальным уравнением.
+// 1. t как интервальная неопределённость (дополнительная размерность).
+// 2. Последовательное применение make_next_iteration.
 func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 	diffEq := func(state compute.Point, t float64) compute.Point {
 		return compute.Point{-0.5 * state[0]}
 	}
 
-	tMaxValues := []float64{2.0, 10.0, 30.0, 50.0}
+	tMaxValues := []float64{2.0, 5.0, 10.0, 20.0}
 
 	for _, tMax := range tMaxValues {
-		b.Run("Approach1_t_as_dimension_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
+		b.Run("t_as_interval_uncertainty_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
 			funcWithT := func(arg compute.Point) (compute.Point, error) {
 				x0 := arg[0]
 				t := arg[1]
@@ -100,22 +194,90 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 			min := compute.Point{0.0, 0.0}
 			max := compute.Point{10.0, tMax}
 			for i := 0; i < b.N; i++ {
-				compute.NewAdaptiveSparseGrid(funcWithT, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				_, err := compute.NewAdaptiveSparseGrid(funcWithT, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
 			}
 		})
 
-		b.Run("Approach2_make_next_iteration_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
+		b.Run("iterative_make_next_iteration_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
 			integrate1s := func(state compute.Point) (compute.Point, error) {
 				return integrateRk4(diffEq, state, 0.0, 1.0, 25), nil
 			}
 			min := compute.Point{0.0}
 			max := compute.Point{10.0}
 			for i := 0; i < b.N; i++ {
-				grid, _ := compute.NewAdaptiveSparseGrid(integrate1s, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				grid, err := compute.NewAdaptiveSparseGrid(integrate1s, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create initial grid: %v", err)
+				}
 				for step := 1; step < int(tMax); step++ {
-					grid, _ = grid.MakeNextIteration(integrate1s, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+					grid, err = grid.MakeNextIteration(integrate1s, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+					if err != nil {
+						b.Fatalf("failed to create next iteration: %v", err)
+					}
 				}
 			}
 		})
 	}
+}
+
+// Бенчмарк 6: влияние жёсткого ограничения числа узлов на время построения.
+func BenchmarkNodeLimitOptimization(b *testing.B) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{math.Sin(5*x) + math.Cos(33*y)}, nil
+	}
+
+	min := compute.Point{0, 0}
+	max := compute.Point{2.0 * math.Pi, 2.0 * math.Pi}
+	limits := []int64{0, 200, 500, 1000}
+
+	for _, limit := range limits {
+		name := "limit_" + strconv.FormatInt(limit, 10)
+		b.Run(name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, limit)
+				if err != nil {
+					b.Fatalf("failed to create grid: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// Бенчмарк 7: сравнение стоимости вычисления значения по уже построенной сетке.
+func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{math.Sin(2*x) * math.Cos(2*y)}, nil
+	}
+
+	min := compute.Point{0.0, 0.0}
+	max := compute.Point{math.Pi, math.Pi}
+	testPoint := compute.Point{0.73, 1.11}
+
+	linearGrid := buildGridNoError(b, funcEval, min, max, 0.001, nil, compute.BasisTypeLinear, compute.BuildTypeParallel, 0, 0)
+	quadraticGrid := buildGridNoError(b, funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
+
+	b.Run("evaluate_linear_grid", func(b *testing.B) {
+		for i := 0; i < b.N * 200000; i++ {
+			_, err := linearGrid.Evaluate(testPoint)
+			if err != nil {
+				b.Fatalf("failed to evaluate grid: %v", err)
+			}
+		}
+	})
+
+	b.Run("evaluate_quadratic_grid", func(b *testing.B) {
+		for i := 0; i < b.N * 200000; i++ {
+			_, err := quadraticGrid.Evaluate(testPoint)
+			if err != nil {
+				b.Fatalf("failed to evaluate grid: %v", err)
+			}
+		}
+	})
 }

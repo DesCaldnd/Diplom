@@ -582,19 +582,19 @@ func (g *AdaptiveSparseGrid) createNode(
 
 func (g *AdaptiveSparseGrid) evaluateForDim(x Point, maxGridDim int64) Point {
 	answer := make(Point, g.outDim)
-	processedNodes := make(map[string]struct{})
 	for _, ep := range g.entryPoints {
 		if ep.dimensions >= maxGridDim {
 			break
 		}
-		clear(processedNodes)
+		processedNodes := make(map[string]struct{})
 		answer.Add(g.evaluateRecursive(x, ep.node, processedNodes, nil))
 	}
 	return answer
 }
 
 func (g *AdaptiveSparseGrid) evaluateRecursive(x Point, n node, processedNodes map[string]struct{}, additionalNodes map[string]node) Point {
-	if _, exists := processedNodes[n.key.String()]; exists {
+	_, exists := processedNodes[n.key.String()]
+	if exists {
 		return make(Point, g.outDim)
 	}
 
@@ -622,6 +622,9 @@ func (g *AdaptiveSparseGrid) evaluateRecursive(x Point, n node, processedNodes m
 }
 
 func (g *AdaptiveSparseGrid) getChildForDimAndArg(parent node, x Point, dimension int64, additionalNodes map[string]node) (node, bool) {
+	if parent.key.level[dimension] == 0 {
+		return node{}, false
+	}
 	key := gridKey{
 		level: make([]int64, g.inDim),
 		index: make([]int64, g.inDim),
