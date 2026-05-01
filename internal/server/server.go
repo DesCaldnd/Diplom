@@ -42,7 +42,7 @@ var (
 		prometheus.HistogramOpts{
 			Name:    "grid_response_size_bytes",
 			Help:    "Size of the protobuf response in bytes",
-			Buckets: []float64{1024, 10240, 102400, 1048576, 10485760, 52428800}, // 1KB, 10KB, 100KB, 1MB, 10MB, 50MB
+			Buckets: []float64{1024, 10240, 102400, 1048576, 10485760, 52428800},
 		},
 	)
 )
@@ -110,14 +110,14 @@ func (f *Formula) SetDiapason(startT, endT compute.ScalarType) {
 	f.tEnd = endT
 }
 
-func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
-	zeroPoint := compute.Point{0, 0}
-	if len(arg) < 2 {
-		return zeroPoint, fmt.Errorf("expected at least 2 arguments, got %d", len(arg))
+func (f *Formula) Evaluate(arg compute.StaticPoint) (compute.StaticPoint, error) {
+	zeroPoint := compute.NewStaticPointFromValues(0, 0)
+	if arg.Dim() < 2 {
+		return zeroPoint, fmt.Errorf("expected at least 2 arguments, got %d", arg.Dim())
 	}
 
-	x := arg[0]
-	y := arg[1]
+	x := arg.At(0)
+	y := arg.At(1)
 
 	env := map[string]interface{}{
 		"x":     x,
@@ -179,17 +179,15 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 			return dx, dy, nil
 		}
 
-		// Адаптивный шаг Рунге-Кутты-Фельберга (RK45)
 		t := f.tBegin
 		dt := f.dt
-		tol := 1e-6 // Допустимая погрешность
+		tol := 1e-6
 
 		for t < f.tEnd {
 			if t+dt > f.tEnd {
 				dt = f.tEnd - t
 			}
 
-			// Коэффициенты для RK45 (Cash-Karp)
 			k1x, k1y, err := getDerivatives(x, y, t)
 			if err != nil {
 				return zeroPoint, err
@@ -220,34 +218,28 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 				return zeroPoint, err
 			}
 
-			// Решение 5-го порядка
 			x5 := x + dt*((37.0/378.0)*k1x+(250.0/621.0)*k3x+(125.0/594.0)*k4x+(512.0/1771.0)*k6x)
 			y5 := y + dt*((37.0/378.0)*k1y+(250.0/621.0)*k3y+(125.0/594.0)*k4y+(512.0/1771.0)*k6y)
 
-			// Решение 4-го порядка
 			x4 := x + dt*((2825.0/27648.0)*k1x+(18575.0/48384.0)*k3x+(13525.0/55296.0)*k4x+(277.0/14336.0)*k5x+(1.0/4.0)*k6x)
 			y4 := y + dt*((2825.0/27648.0)*k1y+(18575.0/48384.0)*k3y+(13525.0/55296.0)*k4y+(277.0/14336.0)*k5y+(1.0/4.0)*k6y)
 
-			// Оценка ошибки
 			errX := math.Abs(x5 - x4)
 			errY := math.Abs(y5 - y4)
 			maxErr := math.Max(errX, errY)
 
 			if maxErr <= tol {
-				// Шаг успешен
 				t += dt
 				x = x5
 				y = y5
 			}
 
-			// Адаптация шага
 			if maxErr == 0 {
 				dt *= 2.0
 			} else {
 				dt *= 0.9 * math.Pow(tol/maxErr, 0.2)
 			}
 
-			// Ограничения на шаг
 			if dt < 1e-5 {
 				dt = 1e-5
 			} else if dt > f.dt*10 {
@@ -273,7 +265,7 @@ func (f *Formula) Evaluate(arg compute.Point) (compute.Point, error) {
 		}
 	}
 
-	return compute.Point{x, y}, nil
+	return compute.NewStaticPointFromValues(x, y), nil
 }
 
 type GridServer struct {
@@ -286,8 +278,8 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		requestDuration.Observe(time.Since(start).Seconds())
 	}()
 
-	min := compute.Point{req.Min.X, req.Min.Y}
-	max := compute.Point{req.Max.X, req.Max.Y}
+	min := compute.NewStaticPointFromValues(req.Min.X, req.Min.Y)
+	max := compute.NewStaticPointFromValues(req.Max.X, req.Max.Y)
 
 	formula, err := NewFormula(req.FormulaX, req.FormulaY, req.Eps, req.FormulaType == pb.FormulaType_DIFFUR)
 	if err != nil {
@@ -319,15 +311,16 @@ func (s *GridServer) GetGrid2D(ctx context.Context, req *pb.Grid2DRequest) (*pb.
 		buildType = compute.BuildTypeSequential
 	}
 
-	var anchorPoints []compute.Point
+	var anchorPoints []compute.StaticPoint
 	for _, anchor := range req.AnchorPoints {
-		anchorPoints = append(anchorPoints, compute.Point{anchor.X, anchor.Y})
+		anchorPoints = append(anchorPoints, compute.NewStaticPointFromValues(anchor.X, anchor.Y))
 	}
 
 	grid, err := compute.NewAdaptiveSparseGridWithContext(
 		ctx,
 		formula.Evaluate,
-		min, max,
+		min,
+		max,
 		req.Eps,
 		anchorPoints,
 		basisType,
@@ -385,8 +378,8 @@ func toPb2D(g *compute.AdaptiveSparseGrid) *pb.Grid2D {
 
 	min := g.Min()
 	max := g.Max()
-	grid.Min = &pb.Point2D{X: min[0], Y: min[1]}
-	grid.Max = &pb.Point2D{X: max[0], Y: max[1]}
+	grid.Min = &pb.Point2D{X: min.At(0), Y: min.At(1)}
+	grid.Max = &pb.Point2D{X: max.At(0), Y: max.At(1)}
 
 	for _, n := range g.Nodes() {
 		grid.Nodes = append(grid.Nodes, nodeToPb(n))
@@ -402,8 +395,8 @@ func toPb2D(g *compute.AdaptiveSparseGrid) *pb.Grid2D {
 func nodeToPb(n compute.NodeInfo) *pb.Grid2D_Node2D {
 	return &pb.Grid2D_Node2D{
 		HasChildren: n.HasChildren,
-		Alpha:       &pb.Point2D{X: n.Alpha[0], Y: n.Alpha[1]},
-		CenterUnit:  &pb.Point2D{X: n.CenterUnit[0], Y: n.CenterUnit[1]},
+		Alpha:       &pb.Point2D{X: n.Alpha.At(0), Y: n.Alpha.At(1)},
+		CenterUnit:  &pb.Point2D{X: n.CenterUnit.At(0), Y: n.CenterUnit.At(1)},
 		Key: &pb.Grid2D_GridKey2D{
 			Level: &pb.Grid2D_Index2D{X: uint64(n.Level[0]), Y: uint64(n.Level[1])},
 			Index: &pb.Grid2D_Index2D{X: uint64(n.Index[0]), Y: uint64(n.Index[1])},

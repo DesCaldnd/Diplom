@@ -1,10 +1,8 @@
 package compute
 
-import (
-	"encoding/binary"
-	"math"
-	"unsafe"
-)
+import "math"
+
+const maxSupportedDim = 8
 
 type BasisType int64
 
@@ -23,41 +21,24 @@ const (
 )
 
 type gridKey struct {
-	level []int64
-	index []int64
-}
-
-func (k gridKey) String() string {
-	totalLength := (len(k.level) + len(k.index)) * 8
-	result := make([]byte, totalLength)
-
-	pos := 0
-
-	for _, v := range k.level {
-		binary.LittleEndian.PutUint64(result[pos:], uint64(v))
-		pos += 8
-	}
-
-	for _, v := range k.index {
-		binary.LittleEndian.PutUint64(result[pos:], uint64(v))
-		pos += 8
-	}
-
-	return unsafe.String(&result[0], len(result))
+	level [maxSupportedDim]int64
+	index [maxSupportedDim]int64
 }
 
 type node struct {
 	key         gridKey
-	centerUnit  Point
-	alpha       Point
+	centerUnit  StaticPoint
+	leftBound   [maxSupportedDim]float64
+	rightBound  [maxSupportedDim]float64
+	alpha       StaticPoint
 	hasChildren bool
+	maxLevel    int64
 }
 
-func (n *node) isPointInAffectZone(point Point, inDim int64) bool {
-	for i := int64(0); i < inDim; i++ {
+func (n *node) isPointInAffectZone(point StaticPoint) bool {
+	for i := int64(0); i < point.dim; i++ {
 		if n.key.level[i] != 0 {
-			boundsFirst, boundsSecond := getAffectBounds(n.key.level[i], n.key.index[i])
-			if point[i] <= boundsFirst || point[i] >= boundsSecond {
+			if point.data[i] <= n.leftBound[i] || point.data[i] >= n.rightBound[i] {
 				return false
 			}
 		} else {
@@ -65,7 +46,7 @@ func (n *node) isPointInAffectZone(point Point, inDim int64) bool {
 			if n.key.index[i] != 0 {
 				expected = 1
 			}
-			if math.Abs(point[i]-expected) > 1e-9 {
+			if math.Abs(point.data[i]-expected) > 1e-9 {
 				return false
 			}
 		}
@@ -98,22 +79,20 @@ func eval1d(x float64, level int64, index int64, basisType BasisType) float64 {
 	}
 
 	t := dist / h
-	var result float64
-
 	switch basisType {
 	case BasisTypeLinear:
-		result = 1.0 - t
+		return 1.0 - t
 	case BasisTypeQuadratic:
-		result = 1.0 - t*t
+		return 1.0 - t*t
+	default:
+		return 0.0
 	}
-
-	return result
 }
 
-func evalBasis(x Point, level []int64, index []int64, basisType BasisType, inDim int64) float64 {
+func evalBasis(x StaticPoint, n node, basisType BasisType) float64 {
 	result := 1.0
-	for i := int64(0); i < inDim; i++ {
-		result *= eval1d(x[i], level[i], index[i], basisType)
+	for i := int64(0); i < x.dim; i++ {
+		result *= eval1d(x.data[i], n.key.level[i], n.key.index[i], basisType)
 		if result == 0 {
 			return result
 		}
@@ -131,26 +110,12 @@ func getCoord(level int64, index int64) float64 {
 	return float64(index) / float64(int64(1)<<level)
 }
 
-func getAffectBounds(level int64, index int64) (float64, float64) {
-	unit := 1.0 / float64(int64(1)<<level)
-	coord := float64(index) / float64(int64(1)<<level)
-	return coord - unit, coord + unit
-}
-
-func getAffectDirection(x Point, level []int64, index []int64, inDim int64) []direction {
-	result := make([]direction, inDim)
-	for i := int64(0); i < inDim; i++ {
-		var coord float64
-		if level[i] > 0 {
-			coord = float64(index[i]) / float64(int64(1)<<level[i])
+func fillAffectDirections(x StaticPoint, n node, dst *[maxSupportedDim]direction) {
+	for i := int64(0); i < x.dim; i++ {
+		if x.data[i] < n.centerUnit.data[i] {
+			dst[i] = directionLeft
 		} else {
-			coord = float64(index[i])
-		}
-		if x[i] < coord {
-			result[i] = directionLeft
-		} else {
-			result[i] = directionRight
+			dst[i] = directionRight
 		}
 	}
-	return result
 }
