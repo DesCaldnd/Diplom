@@ -10,8 +10,8 @@ class ComputeService {
 
   ComputeService._internal() : channel = GrpcOrGrpcWebClientChannel.toSeparatePorts(
       host: "diplom.funandchecks.ru",
-      grpcPort: 443,
-      grpcTransportSecure: true,
+      grpcPort: 9999,
+      grpcTransportSecure: false,
       grpcWebPort: 8082,
       grpcWebTransportSecure: false) {
     gridClient = GridServiceClient(
