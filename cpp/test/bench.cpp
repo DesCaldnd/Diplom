@@ -1,6 +1,5 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
-#include <thread>
 
 import compute;
 import util;
@@ -236,7 +235,7 @@ TEST(ComputeBenchmark, NodeLimitOptimization) {
 TEST(ComputeBenchmark, EvaluationCostAfterBuild) {
   auto func_eval = [](Compute::Point<2> arg) {
     auto x = arg[0], y = arg[1];
-    return Compute::Point<1>{std::sin(2 * x) * std::cos(2 * y)};
+    return Compute::Point<1>{std::sin(15 * x) * std::cos(40 * y)};
   };
 
   Compute::Point<2> min = 0, max = Pi, test_point{0.73, 1.11};
@@ -249,16 +248,45 @@ TEST(ComputeBenchmark, EvaluationCostAfterBuild) {
                                              Compute::BuildType::PARALLEL);
 
   bench("evaluate_linear_grid", 10, [&]() {
-    for (size_t i = 0; i < 200000; ++i) {
+    for (size_t i = 0; i < 10000; ++i) {
       volatile Compute::Point<1> point = linear_grid.evaluate(test_point);
     }
   });
 
   bench("evaluate_quadratic_grid", 15, [&]() {
-    for (size_t i = 0; i < 200000; ++i) {
+    for (size_t i = 0; i < 10000; ++i) {
       volatile Compute::Point<1> point = quadratic_grid.evaluate(test_point);
     }
   });
+}
+
+TEST(ComputeBenchmark, FourDimensionalBuildTypeBasisProduct)
+{
+  auto func_eval = [] (Compute::Point<4> arg) {
+    auto x1 = arg[0], x2 = arg[1], x3 = arg[2], x4 = arg[3];
+    return Compute::Point<1>{std::sin(30 * x1) * std::cos(22.2323 * x2) + std::sin(70 * x3) - 0.15 * std::sin(x4)};
+  };
+
+  struct test_case {
+    Compute::BuildType build_type;
+    Compute::BasisType basis_type;
+    std::string name;
+  };
+  std::vector<test_case> test_cases = {
+    {Compute::BuildType::PARALLEL, Compute::BasisType::LINEAR, "parallel_linear"},
+    {Compute::BuildType::PARALLEL, Compute::BasisType::QUADRATIC, "parallel_quadratic"},
+    {Compute::BuildType::SEQUENTIAL, Compute::BasisType::LINEAR, "sequential_linear"},
+    {Compute::BuildType::SEQUENTIAL, Compute::BasisType::QUADRATIC, "sequential_quadratic"},
+  };
+  Compute::ScalarType epsilon = 0.001;
+  Compute::Point<4> min = 0, max = Pi;
+
+  for (auto test_case : test_cases)
+  {
+    bench(test_case.name, 10, [&]() {
+      volatile Compute::AdaptiveSparseGrid grid(func_eval, min, max, epsilon, {}, test_case.basis_type, test_case.build_type);
+    });
+  }
 }
 
 int main(int argc, char **argv) {

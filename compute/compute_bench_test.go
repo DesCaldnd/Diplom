@@ -253,7 +253,7 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(2*x) * math.Cos(2*y)}, nil
+		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -264,7 +264,7 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	quadraticGrid := buildGridNoError(b, funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 
 	b.Run("evaluate_linear_grid", func(b *testing.B) {
-		for i := 0; i < b.N * 200000; i++ {
+		for i := 0; i < b.N * 10000; i++ {
 			_, err := linearGrid.Evaluate(testPoint)
 			if err != nil {
 				b.Fatalf("failed to evaluate grid: %v", err)
@@ -273,11 +273,49 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	})
 
 	b.Run("evaluate_quadratic_grid", func(b *testing.B) {
-		for i := 0; i < b.N * 200000; i++ {
+		for i := 0; i < b.N * 10000; i++ {
 			_, err := quadraticGrid.Evaluate(testPoint)
 			if err != nil {
 				b.Fatalf("failed to evaluate grid: %v", err)
 			}
 		}
 	})
+}
+
+// Бенчмарк 8: сравнение всех сочетаний BuildType и BasisType на 4-мерной функции.
+func BenchmarkFourDimensionalBuildTypeBasisProduct(b *testing.B) {
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		x1 := arg[0]
+		x2 := arg[1]
+		x3 := arg[2]
+		x4 := arg[3]
+		value := math.Sin(30*x1)*math.Cos(22.2323*x2) + math.Sin(70*x3) - 0.15*math.Sin(x4)
+		return compute.Point{value}, nil
+	}
+
+	min := compute.Point{0.0, 0.0, 0.0, 0.0}
+	max := compute.Point{math.Pi, math.Pi, math.Pi, math.Pi}
+	epsilon := 0.001
+
+	cases := []struct {
+		buildType compute.BuildType
+		basisType compute.BasisType
+		name      string
+	}{
+		{compute.BuildTypeSequential, compute.BasisTypeLinear, "sequential_linear"},
+		{compute.BuildTypeSequential, compute.BasisTypeQuadratic, "sequential_quadratic"},
+		{compute.BuildTypeParallel, compute.BasisTypeLinear, "parallel_linear"},
+		{compute.BuildTypeParallel, compute.BasisTypeQuadratic, "parallel_quadratic"},
+	}
+
+	for _, tc := range cases {
+		b.Run(tc.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, tc.basisType, tc.buildType, 0, 0)
+				if err != nil {
+					b.Fatalf("failed to create 4D grid: %v", err)
+				}
+			}
+		})
+	}
 }
