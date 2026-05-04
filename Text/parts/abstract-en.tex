@@ -1,0 +1,9 @@
+\textbf{Object of development}: a software system for interpolation of multidimensional mappings and solutions of differential equations based on adaptive sparse grids.
+
+\textbf{Goal of the work}: implementation and study of parallel interpolation algorithms based on sparse grids with a quadratic basis, as well as development of an applied system for remote computation and visualization of results.
+
+\textbf{Methods and methodology}: numerical analysis and interpolation methods; hierarchical basis functions; adaptive refinement based on hierarchical surpluses; anchor-point-guided refinement; numerical integration of ordinary differential equations using the Runge--Kutta--Fehlberg method; parallel programming techniques; client-server architecture based on gRPC and protobuf.
+
+\textbf{Results and novelty}: a computational core in Go was developed for constructing adaptive sparse grids for scalar and vector mappings in both sequential and parallel modes. Support for a quadratic basis was implemented to achieve smoother approximation compared to the linear variant. A server-side layer for remote access was created; it interprets user-defined formulas and supports approximation of transition operators arising in the numerical solution of differential equations. A visualization client in Flutter was also developed. The novelty of the work lies in combining adaptive sparse-grid interpolation, parallel construction, and a practical visualization infrastructure within a single software system.
+
+\textbf{Application area}: visualization and analysis of two-dimensional dynamical systems; numerical experiments with transition operators; educational demonstration of adaptive interpolation methods; use as a basis for further research in parallel numerical methods.

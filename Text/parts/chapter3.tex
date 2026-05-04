@@ -1,0 +1,361 @@
+В третьей главе рассматривается практическая реализация вычислительного модуля и его интеграция с вспомогательными компонентами проекта. Основной акцент сделан на устройстве пакета \texttt{compute}, поскольку именно он реализует математический аппарат адаптивных разреженных сеток, поддержку линейного и квадратичного базисов, параллельное построение, контроль числа узлов и механизмы работы с динамическими системами.
+
+\subsection{Реализация вычислительного ядра на Go}
+
+Основная часть алгоритмов сосредоточена в пакете \texttt{compute}. Его центральным элементом является тип \texttt{AdaptiveSparseGrid}, инкапсулирующий параметры области, тип базиса, размерности входа и выхода, список входных точек и множество узлов. Выбор Go в качестве языка реализации вычислительного модуля обусловлен поддержкой конкурентных вычислений, удобной работой с функциями высшего порядка и простотой интеграции в прикладной сервис \cite{GoDocs}.
+
+Конструктор сетки выполняет валидацию входных данных, определяет размерность образа функции, вычисляет значения в контрольных точках и затем запускает построение. Важной особенностью является то, что вычислительное ядро принимает пользовательскую функцию как аргумент. Благодаря этому один и тот же код используется и для интерполяции аналитических отображений, и для операторов перехода, получаемых численным интегрированием.
+
+В листинге \ref{lst:new_grid} показан фрагмент конструктора, задающего общий сценарий создания сетки.
+
+\begin{lstlisting}[language=Go, caption={Создание адаптивной разреженной сетки}, label={lst:new_grid}]
+func NewAdaptiveSparseGridWithContext(
+    ctx context.Context,
+    funcEval func(Point) (Point, error),
+    min, max Point,
+    epsilon ScalarType,
+    anchorPoints []Point,
+    basisType BasisType,
+    buildType BuildType,
+    maxLevel int64,
+    maxNodesInGrid int64,
+) (*AdaptiveSparseGrid, error) {
+    inDim := int64(len(min))
+    if int64(len(max)) != inDim {
+        return nil, fmt.Errorf("min and max must have the same dimension")
+    }
+
+    sampleOut, err := funcEval(min)
+    if err != nil {
+        return nil, err
+    }
+    outDim := int64(len(sampleOut))
+
+    grid := &AdaptiveSparseGrid{
+        min:       min,
+        max:       max,
+        basisType: basisType,
+        inDim:     inDim,
+        outDim:    outDim,
+        nodes:     make(map[string]node),
+    }
+
+    anchors, err := grid.calculateOriginalFunctionAtPoints(funcEval, anchorPoints)
+    if err != nil {
+        return nil, err
+    }
+
+    err = grid.build(ctx, funcEval, epsilon, anchors, buildType, maxLevel, maxNodesInGrid)
+    if err != nil {
+        return nil, err
+    }
+
+    return grid, nil
+}
+\end{lstlisting}
+
+В данном фрагменте видны основные свойства реализации: независимость от природы исходной функции, автоматическое определение размерности результата и наличие параметров, отвечающих за точность, тип базиса, режим построения и жёсткое ограничение числа узлов.
+
+\subsection{Ключи узлов и кодирование положения в сетке}
+
+Каждый узел сетки идентифицируется набором уровней и индексов. Для хранения узлов в отображении используется тип \texttt{gridKey}. Его строковое представление формируется бинарной упаковкой целочисленных массивов.
+
+В листинге \ref{lst:grid_key} показан соответствующий код.
+
+\begin{lstlisting}[language=Go, caption={Представление ключа узла сетки}, label={lst:grid_key}]
+type gridKey struct {
+    level []int64
+    index []int64
+}
+
+func (k gridKey) String() string {
+    totalLength := (len(k.level) + len(k.index)) * 8
+    result := make([]byte, totalLength)
+
+    pos := 0
+    for _, v := range k.level {
+        binary.LittleEndian.PutUint64(result[pos:], uint64(v))
+        pos += 8
+    }
+    for _, v := range k.index {
+        binary.LittleEndian.PutUint64(result[pos:], uint64(v))
+        pos += 8
+    }
+
+    return unsafe.String(&result[0], len(result))
+}
+\end{lstlisting}
+
+Достоинство этого решения состоит в быстром поиске узла по его иерархическому положению. Это критически важно для построения потомков и для рекурсивной интерполяции по дереву узлов.
+
+\subsection{Реализация базисных функций}
+
+Математическая модель из первой главы непосредственно отражается в коде вычисления одномерного базиса. В зависимости от уровня, индекса и выбранного типа базиса вычисляется значение локальной функции влияния. Именно здесь программно различаются линейный и квадратичный варианты.
+
+В листинге \ref{lst:eval1d} приведена функция вычисления одномерного базиса.
+
+\begin{lstlisting}[language=Go, caption={Вычисление одномерной базисной функции}, label={lst:eval1d}]
+func eval1d(x float64, level int64, index int64, basisType BasisType) float64 {
+    if level == 0 {
+        if index == 0 {
+            return 1.0 - x
+        }
+        if index == 1 {
+            return x
+        }
+        return 0.0
+    }
+
+    h := 1.0 / float64(int64(1)<<level)
+    center := float64(index) * h
+    dist := math.Abs(x - center)
+
+    if dist >= h {
+        return 0.0
+    }
+
+    t := dist / h
+    switch basisType {
+    case BasisTypeLinear:
+        return 1.0 - t
+    case BasisTypeQuadratic:
+        return 1.0 - t*t
+    }
+    return 0.0
+}
+\end{lstlisting}
+
+Данный фрагмент важен не только как реализация базиса, но и как точка прямого сопоставления двух режимов работы, сравнение которых затем проводится в бенчмарках.
+
+\subsection{Параллельный и последовательный режимы построения}
+
+Поддержка двух режимов сборки реализована без раздвоения математической логики. Независимые стартовые конфигурации либо вычисляются по очереди, либо запускаются как отдельные goroutine. На практике это позволяет сравнивать режимы \texttt{parallel} и \texttt{sequential} на одном и том же наборе задач.
+
+В листинге \ref{lst:build_parallel} приведён фрагмент функции \texttt{build}, показывающий выбор между последовательным и параллельным режимами.
+
+\begin{lstlisting}[language=Go, caption={Параллельный запуск локальных задач построения}, label={lst:build_parallel}]
+if buildType == BuildTypeParallel {
+    wg.Add(1)
+    go func(k gridKey) {
+        defer wg.Done()
+        res := g.buildGridTask(ctx, funcEval, epsilon, anchors, k, i, maxLevel, maxNodesInGrid)
+        mu.Lock()
+        results = append(results, res)
+        mu.Unlock()
+    }(currentKey)
+} else {
+    res := g.buildGridTask(ctx, funcEval, epsilon, anchors, currentKey, i, maxLevel, maxNodesInGrid)
+    results = append(results, res)
+}
+\end{lstlisting}
+
+Такой способ организации вычислений хорошо согласуется с логикой метода, поскольку параллелизуются именно независимые задачи первого уровня.
+
+\subsection{Создание узла и вычисление коэффициента избытка}
+
+При создании нового узла вычисляется значение исходной функции, затем значение текущей интерполяции в той же точке, после чего формируется коэффициент избытка как их разность.
+
+В листинге \ref{lst:create_node} показан соответствующий фрагмент кода.
+
+\begin{lstlisting}[language=Go, caption={Формирование узла и вычисление коэффициента избытка}, label={lst:create_node}]
+func (g *AdaptiveSparseGrid) createNode(
+    funcEval func(Point) (Point, error),
+    key gridKey,
+    entryPoint *node,
+    dimension int64,
+    additionalNodes map[string]node,
+) (*gridKey, error) {
+    if _, exists := additionalNodes[key.String()]; exists {
+        return nil, nil
+    }
+
+    n := node{
+        key:        key,
+        centerUnit: make(Point, g.inDim),
+    }
+    for i := int64(0); i < g.inDim; i++ {
+        n.centerUnit[i] = getCoord(key.level[i], key.index[i])
+    }
+
+    realArg := g.toReal(n.centerUnit)
+    etalon, err := funcEval(realArg)
+    if err != nil {
+        return nil, err
+    }
+
+    interp := g.evaluateForDimAndEntryPoint(n.centerUnit, dimension, entryPoint, additionalNodes)
+    etalon.Sub(interp)
+    n.alpha = etalon
+    additionalNodes[key.String()] = n
+
+    return &key, nil
+}
+\end{lstlisting}
+
+Этот код непосредственно реализует иерархическую природу метода: узел хранит не абсолютное значение функции, а именно добавочную информацию относительно уже построенного приближения.
+
+\subsection{Ключевой участок buildGrid: адаптация, anchor points и ограничение числа узлов}
+
+Наиболее важным фрагментом реализации является внутренняя логика \texttt{buildGrid}, где одновременно решаются задачи анализа коэффициента избытка, учёта anchor points, порождения дочерних узлов и контроля числа узлов. Именно этот участок лучше всего отражает реальное содержание вычислительного модуля, поэтому он является более показательным, чем элементарные операции над типом \texttt{Point}.
+
+В листинге \ref{lst:build_grid_core} приведён характерный фрагмент алгоритма.
+
+\begin{lstlisting}[language=Go, caption={Фрагмент алгоритма buildGrid: критерии продолжения и ограничение числа узлов}, label={lst:build_grid_core}]
+for len(nodeQueue) > 0 {
+    currentKey := nodeQueue[0]
+    nodeQueue = nodeQueue[1:]
+
+    currentNode := newNodes[currentKey.String()]
+    activeEntryNode := newNodes[entryPointKeyString]
+
+    canContinue := false
+    directions := make([]direction, g.inDim)
+    for i := range directions {
+        directions[i] = directionBoth
+    }
+
+    if currentNode.alpha.Length() <= epsilon {
+        for i := range directions {
+            directions[i] = directionNone
+        }
+        canContinue = true
+    }
+
+    if canContinue {
+        for _, anchor := range anchors {
+            if currentNode.isPointInAffectZone(anchor.arg, g.inDim) {
+                evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &activeEntryNode, newNodes)
+                evalRes.Sub(anchor.ans)
+                if evalRes.Length() >= epsilon {
+                    canContinue = false
+                    affectDirs := getAffectDirection(anchor.arg, currentNode.key.level, currentNode.key.index, g.inDim)
+                    for i := int64(0); i < g.inDim; i++ {
+                        directions[i] |= affectDirs[i]
+                    }
+                }
+            }
+        }
+    }
+
+    if canContinue {
+        continue
+    }
+
+    currentNode.hasChildren = true
+    newNodes[currentKey.String()] = currentNode
+
+    if maxNodesInGrid > 0 && int64(len(newNodes)) >= maxNodesInGrid {
+        break
+    }
+}
+\end{lstlisting}
+
+Этот фрагмент отражает несколько существенных особенностей реализации:
+\begin{enumerate}
+    \item базовое решение принимается по норме коэффициента избытка;
+    \item anchor points могут отменить преждевременную остановку;
+    \item уточнение выполняется направленно;
+    \item рост сетки может быть жёстко ограничен параметром \texttt{maxNodesInGrid}.
+\end{enumerate}
+
+Именно здесь проявляется одно из главных отличий реализованного модуля от базовой математической схемы, рассматриваемой в статье \cite{Morozov2024}: введение ручного механизма управления уточнением через anchor points.
+
+\subsection{Рекурсивная интерполяция по построенной сетке}
+
+После завершения построения объект \texttt{AdaptiveSparseGrid} используется для быстрого вычисления приближённых значений. Интерполяция организована как рекурсивный обход дерева узлов: сначала учитывается вклад текущего узла, затем --- вклад релевантных потомков.
+
+В листинге \ref{lst:evaluate_recursive} показан характерный фрагмент рекурсивного вычисления.
+
+\begin{lstlisting}[language=Go, caption={Рекурсивное вычисление интерполянта}, label={lst:evaluate_recursive}]
+func (g *AdaptiveSparseGrid) evaluateRecursive(
+    x Point,
+    n node,
+    processedNodes map[string]struct{},
+    additionalNodes map[string]node,
+) Point {
+    if _, exists := processedNodes[n.key.String()]; exists {
+        return make(Point, g.outDim)
+    }
+
+    processedNodes[n.key.String()] = struct{}{}
+    basis := evalBasis(x, n.key.level, n.key.index, g.basisType, g.inDim)
+
+    if math.Abs(basis) < 1e-9 {
+        return make(Point, g.outDim)
+    }
+
+    value := n.alpha.Clone()
+    value.MulScalar(basis)
+
+    if n.hasChildren {
+        for i := int64(0); i < g.inDim; i++ {
+            if n.key.level[i] != 0 {
+                child, exists := g.getChildForDimAndArg(n, x, i, additionalNodes)
+                if exists {
+                    value.Add(g.evaluateRecursive(x, child, processedNodes, additionalNodes))
+                }
+            }
+        }
+    }
+    return value
+}
+\end{lstlisting}
+
+Программный смысл этого кода совпадает с теоретической формулой суммы иерархических вкладов. Если значение базиса практически нулевое, соответствующая ветвь обхода мгновенно отсекается.
+
+\subsection{Два режима работы с дифференциальными уравнениями}
+
+Для задач динамики в проекте поддерживаются два принципиально разных подхода.
+
+\textbf{Первый подход: параметр $t$ как интервальная неопределённость.} В этом случае время добавляется как ещё одна координата пространства аргументов. Тогда строится сетка для отображения
+\begin{equation}
+    (x_0, t) \mapsto x(t).
+\end{equation}
+
+Преимущество этого подхода состоит в том, что одна построенная сетка сразу описывает поведение решения на целом временном интервале. Недостаток --- рост размерности задачи и, как следствие, рост вычислительной сложности.
+
+\textbf{Второй подход: итеративное построение через \texttt{MakeNextIteration}.} В этом случае сначала строится одношаговый оператор перехода на интервале длины $1$, а затем он применяется последовательно несколько раз. Преимущество такого подхода состоит в том, что размерность пространства не увеличивается, но приходится выполнять серию последовательных построений.
+
+Именно сопоставление этих двух подходов является одним из ключевых содержательных результатов экспериментальной части, поскольку оно показывает, что разные трактовки времени приводят к разным профилям вычислительной сложности.
+
+\subsection{Вспомогательный серверный слой}
+
+Пакет \texttt{internal/server} реализует удалённый интерфейс к вычислительному ядру. Объект \texttt{Formula} использует библиотеку \texttt{expr} для интерпретации пользовательских выражений \cite{ExprLang}. При работе с дифференциальными уравнениями сервер численно интегрирует систему методом Рунге--Кутты--Фельберга \cite{Hairer1993}, после чего передаёт в модуль \texttt{compute} уже готовое отображение.
+
+С точки зрения архитектуры серверный слой является адаптером, а не предметом основной новизны работы. Его значение состоит в том, что он позволяет использовать вычислительный модуль удалённо и удобно подключать визуализацию.
+
+\subsection{Клиентская визуализация}
+
+Клиентская часть на Flutter реализует ввод параметров, запуск вычислений и отображение узлов сетки \cite{FlutterDocs}. Она важна как средство анализа результатов, но не является математическим ядром работы. Основной результат диплома по-прежнему сосредоточен в модуле \texttt{compute}; клиент выступает как инструмент демонстрации и визуального исследования структуры построенного интерполянта.
+
+\subsection{Анализ структуры бенчмарков}
+
+Для оценки эффективности реализации был расширен набор бенчмарков. В текущей версии проекта измеряются:
+\begin{enumerate}
+    \item зависимость времени построения от размерности задачи и размера области;
+    \item сравнение последовательного и параллельного режимов построения;
+    \item сравнение линейного и квадратичного базисов при различных значениях $\varepsilon$;
+    \item влияние anchor points на сложность построения;
+    \item сравнение двух подходов к работе с дифференциальными уравнениями;
+    \item влияние жёсткого ограничения числа узлов;
+    \item стоимость вычисления значения по уже построенной сетке.
+\end{enumerate}
+
+Такой набор экспериментов нельзя считать тривиальным, поскольку он отражает не только абсолютное время работы, но и влияние архитектурных решений модуля \texttt{compute} на разные режимы использования.
+
+\subsection{Анализ полученных данных}
+
+По содержанию бенчмарков можно выделить несколько наиболее важных групп выводов.
+
+Во-первых, линейный и квадратичный базисы должны сравниваться не только по качеству аппроксимации, но и по времени построения и стоимости последующего вычисления. Квадратичный базис обычно оказывается более затратным на локальном уровне, но при этом позволяет получать более гладкое приближение и потенциально уменьшать необходимую глубину уточнения. Поэтому содержательный анализ должен учитывать обе стороны --- локальную стоимость и глобальную эффективность.
+
+Во-вторых, сравнение \texttt{parallel} и \texttt{sequential} показывает практическую ценность распараллеливания стартовых конфигураций. Это сравнение особенно важно для темы диплома, поскольку напрямую связано с заявленной реализацией параллельных алгоритмов.
+
+В-третьих, сравнение двух режимов работы с дифференциальными уравнениями демонстрирует, что параметр времени может быть учтён либо как отдельная координата, либо через последовательную композицию одношагового оператора. Эти подходы различаются по архитектурному смыслу и по производительности, а потому требуют отдельного разбора в итоговой аналитической главе.
+
+В-четвёртых, механизм жёсткого ограничения числа узлов оказывается важным компромиссом между точностью и затратами. Он даёт возможность использовать метод в ресурсно ограниченной среде и должен рассматриваться как существенный элемент практической оптимизации.
+
+\subsection*{Выводы по главе}
+\addcontentsline{toc}{subsection}{Выводы по главе}
+
+В третьей главе была рассмотрена практическая реализация вычислительного модуля и его вспомогательной инфраструктуры. Показано, каким образом математический аппарат разреженных сеток отражён в коде пакета \texttt{compute}, как реализованы базисные функции, коэффициенты избытка, адаптивное уточнение, anchor points, ограничение числа узлов, рекурсивная интерполяция и два режима работы с дифференциальными уравнениями. Отдельно рассмотрены архитектурная роль серверного слоя и клиентской визуализации, а также структура расширенного набора бенчмарков. Всё это подтверждает, что основное содержание дипломной работы сосредоточено именно в вычислительном модуле, а дополнительные компоненты служат средствами его практического применения и анализа.
