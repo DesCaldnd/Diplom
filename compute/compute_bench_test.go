@@ -239,7 +239,7 @@ func BenchmarkNodeLimitOptimization(b *testing.B) {
 		name := "limit_" + strconv.FormatInt(limit, 10)
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, limit)
+				_, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, limit)
 				if err != nil {
 					b.Fatalf("failed to create grid: %v", err)
 				}
