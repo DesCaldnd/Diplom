@@ -80,7 +80,7 @@ func BenchmarkParallelVsSequentialBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(3*x)*math.Cos(25*y)}, nil
+		return compute.Point{math.Sin(3*x) * math.Cos(25*y)}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -264,7 +264,7 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	quadraticGrid := buildGridNoError(b, funcEval, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 
 	b.Run("evaluate_linear_grid", func(b *testing.B) {
-		for i := 0; i < b.N * 10000; i++ {
+		for i := 0; i < b.N*10000; i++ {
 			_, err := linearGrid.Evaluate(testPoint)
 			if err != nil {
 				b.Fatalf("failed to evaluate grid: %v", err)
@@ -273,7 +273,7 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	})
 
 	b.Run("evaluate_quadratic_grid", func(b *testing.B) {
-		for i := 0; i < b.N * 10000; i++ {
+		for i := 0; i < b.N*10000; i++ {
 			_, err := quadraticGrid.Evaluate(testPoint)
 			if err != nil {
 				b.Fatalf("failed to evaluate grid: %v", err)
