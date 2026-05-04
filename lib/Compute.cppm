@@ -3,8 +3,6 @@
 //
 module;
 
-#include <proto/grid.pb.h>
-
 export module compute;
 
 import util;
@@ -98,52 +96,7 @@ export namespace Compute
                                       cancellation_flag);
         }
 
-        void to_pb_2D(grid::Grid2D *grid)
-        {
-            grid->set_basis_type(
-                basis_type_ == BasisType::LINEAR ? grid::BasisType::LINEAR : grid::BasisType::QUADRATIC);
-            auto min = grid->mutable_min();
-            min->set_x(min_[0]);
-            min->set_y(min_[1]);
-            auto max = grid->mutable_max();
-            max->set_x(max_[0]);
-            max->set_y(max_[1]);
-
-            for (auto &[_, node]: nodes_)
-            {
-                auto pb_node = grid->add_nodes();
-                node_to_pb(node, pb_node);
-            }
-
-            for (auto &entry: entry_points_)
-            {
-                auto pb_node = grid->add_entry_points();
-                node_to_pb(entry.node, pb_node);
-            }
-        }
-
     private:
-        static void node_to_pb(const Node &node, grid::Grid2D::Node2D *to)
-        {
-            to->set_has_children(node.has_children);
-            auto alpha = to->mutable_alpha();
-            alpha->set_x(node.alpha[0]);
-            alpha->set_y(node.alpha[1]);
-
-            auto center = to->mutable_center_unit();
-            center->set_x(node.center_unit[0]);
-            center->set_y(node.center_unit[1]);
-
-            auto grid_key = to->mutable_key();
-            auto level = grid_key->mutable_level();
-            level->set_x(node.key.level[0]);
-            level->set_y(node.key.level[1]);
-
-            auto index = grid_key->mutable_index();
-            index->set_x(node.key.index[0]);
-            index->set_y(node.key.index[1]);
-        }
-
         void check_constraints()
         {
             for (size_t i = 0; i < IN_DIM; ++i)

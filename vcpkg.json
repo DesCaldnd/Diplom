@@ -6,9 +6,6 @@
     "name" : "exprtk",
     "version>=" : "0.0.3"
   }, {
-    "name" : "grpc",
-    "version>=" : "1.76.0#1"
-  }, {
     "name" : "fmt"
   }, {
     "name" : "gtest"

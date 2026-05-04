@@ -19,26 +19,10 @@ if(APPLE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_OSX_SYSROOT "${MACOS_SDK_PATH}")
 endif()
 
-find_package(Protobuf CONFIG REQUIRED)
-find_package(gRPC CONFIG REQUIRED)
-find_package(OpenSSL REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(GTest CONFIG REQUIRED)
-find_path(EXPRTK_INCLUDE_DIRS "exprtk.hpp")
-
-add_library(protolib proto/grid.proto)
-target_link_libraries(protolib PUBLIC gRPC::grpc++)
-target_include_directories(protolib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-
-get_target_property(grpc_cpp_plugin_location gRPC::grpc_cpp_plugin LOCATION)
-
-protobuf_generate(TARGET protolib LANGUAGE cpp)
-protobuf_generate(TARGET protolib LANGUAGE grpc
-        GENERATE_EXTENSIONS .grpc.pb.h .grpc.pb.cc
-        PLUGIN "protoc-gen-grpc=${grpc_cpp_plugin_location}")
 
 add_subdirectory(util)
 add_subdirectory(lib)
-add_subdirectory(server)
 add_subdirectory(examples)
 add_subdirectory(test)

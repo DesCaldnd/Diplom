@@ -24,12 +24,14 @@ module;
 #include <functional>
 #include <thread>
 #include <fmt/core.h>
+#include <chrono>
 
 export module util;
 
 export namespace std
 {
     using std::cout;
+    using std::cerr;
     using std::endl;
     using std::array;
     using std::vector;
@@ -77,7 +79,26 @@ export namespace std
         using std::this_thread::yield;
     }
     using std::swap;
+    namespace chrono {
+        using std::chrono::high_resolution_clock;
+    }
 }
+
+export namespace std::inline literals::inline chrono_literals {
+  // [time.duration.literals], suffixes for duration literals
+  using std::literals::chrono_literals::operator""h;
+  using std::literals::chrono_literals::operator""min;
+  using std::literals::chrono_literals::operator""s;
+  using std::literals::chrono_literals::operator""ms;
+  using std::literals::chrono_literals::operator""us;
+  using std::literals::chrono_literals::operator""ns;
+
+  // [using std::literals::chrono_literals::.cal.day.nonmembers], non-member functions
+  using std::literals::chrono_literals::operator""d;
+
+  // [using std::literals::chrono_literals::.cal.year.nonmembers], non-member functions
+  using std::literals::chrono_literals::operator""y;
+} // namespace std::inline literals::inline chrono_literals
 
 export namespace fmt
 {

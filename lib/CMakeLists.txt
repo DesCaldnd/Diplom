@@ -34,5 +34,5 @@ target_sources(compute
         FILE_SET CXX_MODULES FILES Compute.cppm
 )
 
-target_link_libraries(compute util function_traits vector_value helper_types protolib)
+target_link_libraries(compute util function_traits vector_value helper_types)
 
