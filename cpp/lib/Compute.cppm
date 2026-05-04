@@ -174,9 +174,10 @@ export namespace Compute
                    BuildType build_type, size_t max_level, size_t max_nodes_in_grid,
                    std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag)
         {
-            const auto launch_type = build_type == BuildType::PARALLEL ? std::launch::async : std::launch::deferred;
             for (size_t i = 0; i <= IN_DIM; ++i)
             {
+                const auto launch_type = (build_type == BuildType::PARALLEL && i > 0 && i < IN_DIM - 1) ? std::launch::async : std::launch::deferred;
+
                 GridKey key;
                 key.level = 0;
                 key.index = 0;

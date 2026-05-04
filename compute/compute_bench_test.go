@@ -117,7 +117,7 @@ func BenchmarkLinearVsQuadraticBasis(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(2*x) * math.Cos(3*y)}, nil
+		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}

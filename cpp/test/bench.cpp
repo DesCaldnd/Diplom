@@ -154,7 +154,7 @@ TEST(ComputeBenchmark, ParallelVsSequentialBuild) {
 TEST(ComputeBenchmark, LinearVsQuadraticBasis) {
   auto funcEval = [](Compute::Point<2> arg) {
     auto x = arg[0], y = arg[1];
-    return Compute::Point<1>{std::sin(2 * x) * std::cos(3 * y)};
+    return Compute::Point<1>{std::sin(15 * x) * std::cos(40 * y)};
   };
 
   Compute::Point<2> min = 0, max = Pi;

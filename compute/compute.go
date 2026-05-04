@@ -324,7 +324,7 @@ func (g *AdaptiveSparseGrid) build(
 
 				expandIndices(&currentKey, j, g.inDim)
 
-				if buildType == BuildTypeParallel {
+				if buildType == BuildTypeParallel && i > 0 && i < g.inDim-1 {
 					wg.Add(1)
 					go func(k gridKey) {
 						defer wg.Done()
