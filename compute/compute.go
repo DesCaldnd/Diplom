@@ -407,8 +407,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 	nodeQueue := []gridKey{entryPoint.key}
 	newNodes := make(map[string]node)
 	newNodes[entryPoint.key.String()] = entryPoint
-
-	entryPointKeyString := entryPoint.key.String()
+	entryPoint.hasChildren = true
 
 	currentMaxLevel := int64(0)
 	for i := int64(0); i < g.inDim; i++ {
@@ -428,7 +427,6 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		nodeQueue = nodeQueue[1:]
 
 		currentNode := newNodes[currentKey.String()]
-		activeEntryNode := newNodes[entryPointKeyString]
 
 		canContinue := false
 
@@ -455,7 +453,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		if canContinue && !canContinueForce {
 			for _, anchor := range anchors {
 				if currentNode.isPointInAffectZone(anchor.arg, g.inDim) {
-					evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &activeEntryNode, newNodes)
+					evalRes := g.evaluateForDimAndEntryPoint(anchor.arg, dimension, &entryPoint, newNodes)
 					evalRes.Sub(anchor.ans)
 					if evalRes.Length() >= epsilon {
 						canContinue = false
@@ -505,7 +503,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			keyRight.index[i] = 2*currentNode.key.index[i] + 1
 
 			if (directionLeft & directions[i]) != directionNone {
-				leftNodeKey, err := g.createNode(funcEval, keyLeft, &activeEntryNode, dimension, newNodes)
+				leftNodeKey, err := g.createNode(funcEval, keyLeft, &entryPoint, dimension, newNodes)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -515,7 +513,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			}
 
 			if (directionRight & directions[i]) != directionNone {
-				rightNodeKey, err := g.createNode(funcEval, keyRight, &activeEntryNode, dimension, newNodes)
+				rightNodeKey, err := g.createNode(funcEval, keyRight, &entryPoint, dimension, newNodes)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -530,7 +528,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 		}
 	}
 
-	return newNodes[entryPointKeyString], newNodes, nil
+	return newNodes[entryPoint.key.String()], newNodes, nil
 }
 
 func (g *AdaptiveSparseGrid) evaluateForDimAndEntryPoint(x Point, maxGridDim int64, entryPoint *node, additionalNodes map[string]node) Point {
@@ -640,11 +638,13 @@ func (g *AdaptiveSparseGrid) getChildForDimAndArg(parent node, x Point, dimensio
 	}
 	key.index[dimension] = 2*key.index[dimension] + dir
 
-	if child, exists := g.nodes[key.String()]; exists {
+	hash := key.String()
+
+	if child, exists := g.nodes[hash]; exists {
 		return child, true
 	}
 	if additionalNodes != nil {
-		if child, exists := additionalNodes[key.String()]; exists {
+		if child, exists := additionalNodes[hash]; exists {
 			return child, true
 		}
 	}
