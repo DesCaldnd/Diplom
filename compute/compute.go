@@ -14,7 +14,7 @@ const (
 	BuildTypeParallel
 )
 
-const NODE_PARALLEL = 8
+const NODE_PARALLEL = 32
 
 type AdaptiveSparseGrid struct {
 	min         Point
@@ -383,15 +383,6 @@ func (g *AdaptiveSparseGrid) buildGridTask(
 	}
 }
 
-type nodeProcessingResult struct {
-	key          gridKey
-	updatedNode  node
-	childKeys    []gridKey
-	maxLevel     int64
-	shouldUpdate bool
-	err          error
-}
-
 func (g *AdaptiveSparseGrid) buildGrid(
 	ctx context.Context,
 	funcEval func(Point) (Point, error),
@@ -506,7 +497,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			keyRight.index[i] = 2*currentNode.key.index[i] + 1
 
 			if (directionLeft & directions[i]) != directionNone {
-				leftNodeKey, err := g.createNode(funcEval, keyLeft, &activeEntryNode, dimension, newNodes, currentNode.depth+1)
+				leftNodeKey, err := g.createNode(funcEval, keyLeft, &entryPoint, dimension, newNodes, currentNode.depth+1)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -516,7 +507,7 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			}
 
 			if (directionRight & directions[i]) != directionNone {
-				rightNodeKey, err := g.createNode(funcEval, keyRight, &activeEntryNode, dimension, newNodes, currentNode.depth+1)
+				rightNodeKey, err := g.createNode(funcEval, keyRight, &entryPoint, dimension, newNodes, currentNode.depth+1)
 				if err != nil {
 					return node{}, nil, err
 				}
@@ -564,79 +555,58 @@ func (g *AdaptiveSparseGrid) buildGridParallel(
 		default:
 		}
 
-		depthResults := make([]nodeProcessingResult, len(currentDepthKeys))
 		activeEntryNode := newNodes[entryPointKeyString]
 		currentDepth := newNodes[currentDepthKeys[0].String()].depth
-
-		var processWG sync.WaitGroup
-		for batchStart := 0; batchStart < len(currentDepthKeys); batchStart += NODE_PARALLEL {
-			batchEnd := batchStart + NODE_PARALLEL
-			if batchEnd > len(currentDepthKeys) {
-				batchEnd = len(currentDepthKeys)
-			}
-
-			processWG.Add(1)
-			go func(batchStart, batchEnd int) {
-				defer processWG.Done()
-				for i := batchStart; i < batchEnd; i++ {
-					depthResults[i] = g.processNodeForBuildGrid(epsilon, anchors, currentDepthKeys[i], &activeEntryNode, dimension, maxLevel, newNodes)
-				}
-			}(batchStart, batchEnd)
-		}
-		processWG.Wait()
-
-		for _, res := range depthResults {
-			if res.err != nil {
-				return node{}, nil, res.err
-			}
-			if res.maxLevel > currentMaxLevel {
-				currentMaxLevel = res.maxLevel
-			}
+		nextDepthKeys := make([]gridKey, 0, len(currentDepthKeys))
+		nextDepthKeyStrings := make([]string, 0, len(currentDepthKeys))
+		var nextDepthKnown map[string]struct{}
+		if len(currentDepthKeys) > 1 {
+			nextDepthKnown = make(map[string]struct{}, len(currentDepthKeys))
 		}
 
-		nextDepthKeys := make([]gridKey, 0)
-		nextDepthKnown := make(map[string]struct{})
-		for _, res := range depthResults {
-			if res.shouldUpdate {
-				newNodes[res.key.String()] = res.updatedNode
-			}
-			for _, childKey := range res.childKeys {
-				childKeyString := childKey.String()
-				if _, exists := newNodes[childKeyString]; exists {
-					continue
-				}
-				if _, exists := nextDepthKnown[childKeyString]; exists {
-					continue
-				}
-				nextDepthKnown[childKeyString] = struct{}{}
-				nextDepthKeys = append(nextDepthKeys, childKey)
-			}
-		}
-
-		createdNodes := make([]node, len(nextDepthKeys))
-		createErrors := make([]error, len(nextDepthKeys))
-		var createWG sync.WaitGroup
-		for batchStart := 0; batchStart < len(nextDepthKeys); batchStart += NODE_PARALLEL {
-			batchEnd := batchStart + NODE_PARALLEL
-			if batchEnd > len(nextDepthKeys) {
-				batchEnd = len(nextDepthKeys)
-			}
-
-			createWG.Add(1)
-			go func(batchStart, batchEnd int) {
-				defer createWG.Done()
-				for i := batchStart; i < batchEnd; i++ {
-					createdNodes[i], createErrors[i] = g.buildNode(funcEval, nextDepthKeys[i], &activeEntryNode, dimension, newNodes, currentDepth+1)
-				}
-			}(batchStart, batchEnd)
-		}
-		createWG.Wait()
-
-		for i, err := range createErrors {
+		for _, currentKey := range currentDepthKeys {
+			maxLvl, err := g.processNodeForBuildGrid(epsilon, anchors, currentKey, &activeEntryNode, dimension, maxLevel, newNodes, nextDepthKnown, &nextDepthKeys, &nextDepthKeyStrings)
 			if err != nil {
 				return node{}, nil, err
 			}
-			newNodes[nextDepthKeys[i].String()] = createdNodes[i]
+			if maxLvl > currentMaxLevel {
+				currentMaxLevel = maxLvl
+			}
+		}
+
+		if len(nextDepthKeys) < 2*NODE_PARALLEL {
+			for i, childKey := range nextDepthKeys {
+				createdNode, err := g.buildNode(funcEval, childKey, &activeEntryNode, dimension, newNodes, currentDepth+1)
+				if err != nil {
+					return node{}, nil, err
+				}
+				newNodes[nextDepthKeyStrings[i]] = createdNode
+			}
+		} else {
+			createdNodes := make([]node, len(nextDepthKeys))
+			createErrors := make([]error, len(nextDepthKeys))
+			var createWG sync.WaitGroup
+			for batchStart := 0; batchStart < len(nextDepthKeys); batchStart += NODE_PARALLEL {
+				batchEnd := batchStart + NODE_PARALLEL
+				if batchEnd > len(nextDepthKeys) {
+					batchEnd = len(nextDepthKeys)
+				}
+
+				createWG.Add(1)
+				go func(batchStart, batchEnd int) {
+					defer createWG.Done()
+					for i := batchStart; i < batchEnd; i++ {
+						createdNodes[i], createErrors[i] = g.buildNode(funcEval, nextDepthKeys[i], &activeEntryNode, dimension, newNodes, currentDepth+1)
+					}
+				}(batchStart, batchEnd)
+			}
+			createWG.Wait()
+			for i, err := range createErrors {
+				if err != nil {
+					return node{}, nil, err
+				}
+				newNodes[nextDepthKeyStrings[i]] = createdNodes[i]
+			}
 		}
 
 		if maxNodesInGrid > 0 && int64(len(newNodes)) >= maxNodesInGrid {
@@ -657,10 +627,12 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 	dimension int64,
 	maxLevel int64,
 	newNodes map[string]node,
-) nodeProcessingResult {
-	currentNode := newNodes[currentKey.String()]
-
-	canContinue := false
+	nextDepthKnown map[string]struct{},
+	nextDepthKeys *[]gridKey,
+	nextDepthKeyStrings *[]string,
+) (int64, error) {
+	currentKeyString := currentKey.String()
+	currentNode := newNodes[currentKeyString]
 
 	maxLvl := int64(0)
 	for i := int64(0); i < g.inDim; i++ {
@@ -670,17 +642,8 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 	}
 
 	canContinueForce := maxLvl >= 64
-	directions := make([]direction, g.inDim)
-	for i := range directions {
-		directions[i] = directionBoth
-	}
-
-	if canContinueForce || currentNode.alpha.Length() <= epsilon {
-		for i := range directions {
-			directions[i] = directionNone
-		}
-		canContinue = true
-	}
+	canContinue := canContinueForce || currentNode.alpha.Length() <= epsilon
+	var directions []direction
 
 	if canContinue && !canContinueForce {
 		for _, anchor := range anchors {
@@ -689,6 +652,9 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 				evalRes.Sub(anchor.ans)
 				if evalRes.Length() >= epsilon {
 					canContinue = false
+					if directions == nil {
+						directions = make([]direction, g.inDim)
+					}
 					affectDirs := getAffectDirection(anchor.arg, currentNode.key.level, currentNode.key.index, g.inDim)
 					for i := int64(0); i < g.inDim; i++ {
 						directions[i] |= affectDirs[i]
@@ -699,11 +665,11 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 	}
 
 	if canContinue || canContinueForce {
-		return nodeProcessingResult{key: currentKey, maxLevel: maxLvl}
+		return maxLvl, nil
 	}
 
 	currentNode.hasChildren = true
-	childKeys := make([]gridKey, 0, 2*g.inDim)
+	newNodes[currentKeyString] = currentNode
 
 	for i := int64(0); i < g.inDim; i++ {
 		if currentNode.key.level[i] == 0 || (maxLevel > 0 && currentNode.key.level[i] >= maxLevel) {
@@ -734,22 +700,42 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 		keyLeft.index[i] = 2*currentNode.key.index[i] - 1
 		keyRight.index[i] = 2*currentNode.key.index[i] + 1
 
-		if (directionLeft & directions[i]) != directionNone {
-			childKeys = append(childKeys, keyLeft)
+		dirs := directionBoth
+		if directions != nil {
+			dirs = directions[i]
 		}
 
-		if (directionRight & directions[i]) != directionNone {
-			childKeys = append(childKeys, keyRight)
+		if (directionLeft & dirs) != directionNone {
+			g.addNextDepthKey(keyLeft, newNodes, nextDepthKnown, nextDepthKeys, nextDepthKeyStrings)
+		}
+
+		if (directionRight & dirs) != directionNone {
+			g.addNextDepthKey(keyRight, newNodes, nextDepthKnown, nextDepthKeys, nextDepthKeyStrings)
 		}
 	}
 
-	return nodeProcessingResult{
-		key:          currentKey,
-		updatedNode:  currentNode,
-		childKeys:    childKeys,
-		maxLevel:     maxLvl,
-		shouldUpdate: true,
+	return maxLvl, nil
+}
+
+func (g *AdaptiveSparseGrid) addNextDepthKey(
+	key gridKey,
+	newNodes map[string]node,
+	nextDepthKnown map[string]struct{},
+	nextDepthKeys *[]gridKey,
+	nextDepthKeyStrings *[]string,
+) {
+	keyString := key.String()
+	if _, exists := newNodes[keyString]; exists {
+		return
 	}
+	if nextDepthKnown != nil {
+		if _, exists := nextDepthKnown[keyString]; exists {
+			return
+		}
+		nextDepthKnown[keyString] = struct{}{}
+	}
+	*nextDepthKeys = append(*nextDepthKeys, key)
+	*nextDepthKeyStrings = append(*nextDepthKeyStrings, keyString)
 }
 
 func (g *AdaptiveSparseGrid) evaluateForDimAndEntryPoint(x Point, maxGridDim int64, entryPoint *node, additionalNodes map[string]node) Point {
