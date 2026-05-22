@@ -295,7 +295,7 @@ func BenchmarkFourDimensionalBuildTypeBasisProduct(b *testing.B) {
 
 	min := compute.Point{0.0, 0.0, 0.0, 0.0}
 	max := compute.Point{math.Pi, math.Pi, math.Pi, math.Pi}
-	epsilon := 0.001
+	epsilon := 0.000001
 
 	cases := []struct {
 		buildType compute.BuildType
