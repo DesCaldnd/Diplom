@@ -51,6 +51,7 @@ type node struct {
 	centerUnit  Point
 	alpha       Point
 	hasChildren bool
+	depth       int64
 }
 
 func (n *node) isPointInAffectZone(point Point, inDim int64) bool {
