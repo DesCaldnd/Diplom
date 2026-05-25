@@ -268,7 +268,12 @@ export namespace Compute
                 bool can_continue_force = node.key.level.max() >= sizeof(size_t) * 8;
                 VectorValue<Direction, IN_DIM> directions(Direction::BOTH);
 
-                if (can_continue_force || node.alpha.length() <= epsilon)
+                size_t level_sum = 0;
+		        for (const auto l : node.key.level.coords) {
+			        level_sum += l;
+		        }
+		        ScalarType weight = std::pow(2.0, -static_cast<ScalarType>(level_sum));
+                if (can_continue_force || node.alpha.length() * weight <= epsilon)
                 {
                     directions.fill(Direction::NONE);
                     can_continue = true;

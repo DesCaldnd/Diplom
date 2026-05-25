@@ -69,7 +69,7 @@ TEST(ComputeBenchmark, DomainScalingDifferentDimensions) {
     bench(fmt::format("dim_1_scale_{}*pi", scale), 40, [&]() {
       volatile Compute::AdaptiveSparseGrid grid(
           [](Compute::Point<1> arg) {
-            return Compute::Point<1>{std::sin(arg[0]) * std::cos(arg[0] / 2)};
+            return Compute::Point<1>{std::sin(arg[0]) * std::cos(arg[0] * arg[0] / 2) + std::tan(0.1 * arg[0])};
           },
           min, max, 0.001, {}, Compute::BasisType::QUADRATIC,
           DefaultBuildType);
@@ -83,9 +83,9 @@ TEST(ComputeBenchmark, DomainScalingDifferentDimensions) {
     bench(fmt::format("dim_2_scale_{}*pi", scale), 40, [&]() {
       volatile Compute::AdaptiveSparseGrid grid(
           [](Compute::Point<2> arg) {
-            return Compute::Point<1>{std::sin(arg[0]) * std::cos(arg[0] / 2) +
+            return Compute::Point<1>{std::sin(arg[0]) * std::cos(arg[0] * arg[0] / 2) +  std::tan(0.1 * arg[0])+
                                      std::sin(arg[1] * 2) *
-                                         std::cos(arg[1] / 3)};
+                                         std::cos(arg[0] * arg[1] / 3) + std::tan(0.1 * arg[1])};
           },
           min, max, 0.001, {}, Compute::BasisType::QUADRATIC,
           DefaultBuildType);
@@ -100,9 +100,9 @@ TEST(ComputeBenchmark, DomainScalingDifferentDimensions) {
       volatile Compute::AdaptiveSparseGrid grid(
           [](Compute::Point<3> arg) {
             return Compute::Point<1>{
-                std::sin(arg[0]) * std::cos(arg[0] / 2) +
-                std::sin(arg[1] * 2) * std::cos(arg[1] / 3) +
-                std::sin(arg[2] * 3) * std::cos(arg[2] / 4)};
+                std::sin(arg[0]) * std::cos(arg[0] * arg[0] / 2) + std::tan(0.1 * arg[0]) +
+                std::sin(arg[1] * 2) * std::cos(arg[0] * arg[1] / 3) + std::tan(0.1 * arg[1]) +
+                std::sin(arg[2] * 3) * std::cos(arg[0] * arg[2] / 4) + std::tan(0.1 * arg[2])};
           },
           min, max, 0.001, {}, Compute::BasisType::QUADRATIC,
           DefaultBuildType);
@@ -113,7 +113,7 @@ TEST(ComputeBenchmark, DomainScalingDifferentDimensions) {
 TEST(ComputeBenchmark, ParallelVsSequentialBuild) {
   auto funcEval = [](Compute::Point<2> arg) {
     auto x = arg[0], y = arg[1];
-    return Compute::Point<1>{std::sin(3 * x) * std::cos(25 * y)};
+    return Compute::Point<1>{std::sin(3 * x) * std::cos(25 * y) + 0.2 * std::sin(7 * x + 2.5) - 0.15 * std::cos(11 * y - 1.0)};
   };
 
   Compute::Point<2> min = 0, max = 2 * Pi;
@@ -153,12 +153,14 @@ TEST(ComputeBenchmark, ParallelVsSequentialBuild) {
 TEST(ComputeBenchmark, LinearVsQuadraticBasis) {
   auto funcEval = [](Compute::Point<2> arg) {
     auto x = arg[0], y = arg[1];
-    return Compute::Point<1>{std::sin(15 * x) * std::cos(40 * y)};
+    return Compute::Point<1>{std::sin(15 * x) + 0.6 * std::cos(40 * y) +
+                             0.2 * std::sin(31 * x + 0.3) -
+                             0.12 * std::cos(19 * y - 0.7) + std::sin(x * y)};
   };
 
   Compute::Point<2> min = 0, max = Pi;
 
-  std::vector<Compute::ScalarType> eps_vals{1e-2, 5e-3, 1e-3};
+  std::vector<Compute::ScalarType> eps_vals{1e-2, 5e-3, 1e-3, 1e-4, 1e-5, 5e-6, 1e-6};
 
   for (auto eps : eps_vals) {
     bench(fmt::format("linear_eps_{}", eps), 50, [&]() {
@@ -173,25 +175,27 @@ TEST(ComputeBenchmark, LinearVsQuadraticBasis) {
 }
 
 TEST(ComputeBenchmark, DifferentialEquationApproaches) {
-  auto diff_eq = [](Compute::Point<1> state, Compute::ScalarType t) {
-    return Compute::Point<1>{-0.5 * state[0]};
+  auto diff_eq = [](Compute::Point<2> state, Compute::ScalarType t) {
+    auto x = state[0], y = state[1];
+    return Compute::Point<2>{-y / (1 + std::sqrt(x * x + y * y)),
+                             -x / (1 + std::sqrt(x * x + y * y))};
   };
 
   std::vector<size_t> t_max_values{2, 5, 10, 20};
 
   for (auto t_max : t_max_values) {
-    auto func_with_t = [&](Compute::Point<2> arg) {
-      auto x0 = arg[0], t = arg[1];
-      return integrate_rk4(diff_eq, Compute::Point<1>{x0}, 0, t, 50);
+    auto func_with_t = [&](Compute::Point<3> arg) {
+      auto x0 = arg[0], y0 = arg[1], t = arg[2];
+      return integrate_rk4(diff_eq, Compute::Point<2>{x0, y0}, 0, t, 50);
     };
 
-    auto integrate1s = [&](Compute::Point<1> state) {
-      return integrate_rk4(diff_eq, Compute::Point<1>{state[0]}, 0, 1, 25);
+    auto integrate1s = [&](Compute::Point<2> state) {
+      return integrate_rk4(diff_eq, Compute::Point<2>{state[0], state[1]}, 0, 1, 25);
     };
 
     bench(fmt::format("t_as_interval_uncertainty_tMax_{}", t_max), 40, [&]() {
-      Compute::Point<2> min = {0, 0},
-                        max = {10, static_cast<Compute::ScalarType>(t_max)};
+      Compute::Point<3> min = {-1, 0, 0},
+                        max = {1, 1, static_cast<Compute::ScalarType>(t_max)};
       volatile Compute::AdaptiveSparseGrid grid(
           func_with_t, min, max, 0.001, {}, Compute::BasisType::QUADRATIC,
           DefaultBuildType);
@@ -199,7 +203,7 @@ TEST(ComputeBenchmark, DifferentialEquationApproaches) {
 
     bench(fmt::format("iterative_make_next_iteration_tMax_{}", t_max), 40,
           [&]() {
-            Compute::Point<1> min = 0, max = 10;
+            Compute::Point<2> min = {-1, 0}, max = {1, 1};
             Compute::AdaptiveSparseGrid grid(integrate1s, min, max, 0.001, {},
                                              Compute::BasisType::QUADRATIC,
                                              DefaultBuildType);
@@ -235,7 +239,9 @@ TEST(ComputeBenchmark, NodeLimitOptimization) {
 TEST(ComputeBenchmark, EvaluationCostAfterBuild) {
   auto func_eval = [](Compute::Point<2> arg) {
     auto x = arg[0], y = arg[1];
-    return Compute::Point<1>{std::sin(15 * x) * std::cos(40 * y)};
+    return Compute::Point<1>{std::sin(15 * x) + 0.6 * std::cos(40 * y) +
+                             0.2 * std::sin(31 * x + 0.3) -
+                             0.12 * std::cos(19 * y - 0.7) + std::sin(x * y)};
   };
 
   Compute::Point<2> min = 0, max = Pi, test_point{0.73, 1.11};
@@ -260,11 +266,12 @@ TEST(ComputeBenchmark, EvaluationCostAfterBuild) {
   });
 }
 
-TEST(ComputeBenchmark, FourDimensionalBuildTypeBasisProduct)
-{
-  auto func_eval = [] (Compute::Point<4> arg) {
+TEST(ComputeBenchmark, FourDimensionalBuildTypeBasisProduct) {
+  auto func_eval = [](Compute::Point<4> arg) {
     auto x1 = arg[0], x2 = arg[1], x3 = arg[2], x4 = arg[3];
-    return Compute::Point<1>{std::sin(30 * x1) * std::cos(22.2323 * x2) + std::sin(70 * x3) - 0.15 * std::sin(x4)};
+    return Compute::Point<1>{std::sin(30 * x1) * std::cos(22.2323 * x2) +
+                             std::sin(70 * x3) - 0.15 * std::sin(x4) +
+                             std::cos(x1 * x3)};
   };
 
   struct test_case {
@@ -278,7 +285,7 @@ TEST(ComputeBenchmark, FourDimensionalBuildTypeBasisProduct)
     {Compute::BuildType::SEQUENTIAL, Compute::BasisType::LINEAR, "sequential_linear"},
     {Compute::BuildType::SEQUENTIAL, Compute::BasisType::QUADRATIC, "sequential_quadratic"},
   };
-  Compute::ScalarType epsilon = 0.001;
+  Compute::ScalarType epsilon = 0.0000005;
   Compute::Point<4> min = 0, max = Pi;
 
   for (auto test_case : test_cases)
