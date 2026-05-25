@@ -383,3 +383,40 @@ func TestLinearBasis(t *testing.T) {
 		}
 	}
 }
+
+func TestComplexDiffur(t *testing.T) {
+	diffEq := func(arg compute.Point, _ float64) (compute.Point) {
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{-y / (1+math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2))), -x / (1+math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2)))}
+	}
+	funcEval := func(initialState compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq, initialState, 0.0, 5.0, 100), nil
+	}
+	min := compute.Point{-1.0, 0.0}
+	max := compute.Point{1.0, 1.0}
+
+	eps := 0.001
+
+	testPoints := []compute.Point{
+		{0.0, 0.0}, {1.0, 1.0}, {-1.0, -1.0}, {0.0, 1.0}, {1.0, 0.0}, {-0.54, 0.23}, {0.264, 0.837},
+	}
+
+	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, eps, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, 0)
+
+	if err != nil {
+		t.Fatalf("failed to create grid: %v", err)
+	}
+
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected, _ := funcEval(testPoint)
+
+		if math.Abs(math.Sqrt(math.Pow(result[0]-expected[0], 2) + math.Pow(result[1]-expected[1], 2))) > eps*2 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
+	}
+}

@@ -80,7 +80,8 @@ func BenchmarkParallelVsSequentialBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(3*x) * math.Cos(25*y)}, nil
+		value := math.Sin(3*x) + 0.35*math.Cos(25*y) + 0.2*math.Sin(7*x+2.5) - 0.15*math.Cos(11*y-1.0)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -117,7 +118,8 @@ func BenchmarkLinearVsQuadraticBasis(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
+		value := math.Sin(15*x) + 0.6*math.Cos(40*y) + 0.2*math.Sin(31*x+0.3) - 0.12*math.Cos(19*y-0.7)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -228,7 +230,8 @@ func BenchmarkNodeLimitOptimization(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(5*x) + math.Cos(33*y)}, nil
+		value := math.Sin(5*x) + math.Cos(33*y) + 0.22*math.Sin(17*x+0.4) - 0.18*math.Cos(21*y-0.2)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0, 0}
@@ -253,7 +256,8 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
+		value := math.Sin(15*x) + 0.6*math.Cos(40*y) + 0.2*math.Sin(31*x+0.3) - 0.12*math.Cos(19*y-0.7)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}

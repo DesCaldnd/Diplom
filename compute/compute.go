@@ -313,8 +313,6 @@ func (g *AdaptiveSparseGrid) build(
 			key.level[g.inDim-j-1] = 1
 		}
 
-		var results []buildResult
-
 		for {
 			indexPermutations := int64(1) << (g.inDim - i)
 
@@ -328,25 +326,22 @@ func (g *AdaptiveSparseGrid) build(
 				expandIndices(&currentKey, j, g.inDim)
 
 				res := g.buildGridTask(ctx, funcEval, epsilon, anchors, currentKey, i, buildType, maxLevel, maxNodesInGrid)
-				results = append(results, res)
+
+				if res.err != nil {
+					return res.err
+				}
+				ep := entryPoint{
+					node:       res.node,
+					dimensions: i,
+				}
+				g.entryPoints = append(g.entryPoints, ep)
+				for k, v := range res.newNodes {
+					g.nodes[k] = v
+				}
 			}
 
 			if !nextPermutation(key.level) {
 				break
-			}
-		}
-
-		for _, res := range results {
-			if res.err != nil {
-				return res.err
-			}
-			ep := entryPoint{
-				node:       res.node,
-				dimensions: i,
-			}
-			g.entryPoints = append(g.entryPoints, ep)
-			for k, v := range res.newNodes {
-				g.nodes[k] = v
 			}
 		}
 	}
@@ -574,7 +569,7 @@ func (g *AdaptiveSparseGrid) buildGridParallel(
 			}
 		}
 
-		if len(nextDepthKeys) < 2*NODE_PARALLEL {
+		if len(nextDepthKeys) < 3*NODE_PARALLEL {
 			for i, childKey := range nextDepthKeys {
 				createdNode, err := g.buildNode(funcEval, childKey, &activeEntryNode, dimension, newNodes, currentDepth+1)
 				if err != nil {

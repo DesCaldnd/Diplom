@@ -18,3 +18,5 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
+
+scripts/grid_data/*.json
