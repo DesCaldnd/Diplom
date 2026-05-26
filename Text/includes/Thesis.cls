@@ -324,8 +324,8 @@
 \newcommand{\@terminology}[1]{
     \clearpage
     \phantomsection
-    \section*{ОПРЕДЕЛЕНИЯ, ОБОЗНАЧЕНИЯ И СОКРАЩЕНИЯ}
-    \addcontentsline{toc}{section}{ОПРЕДЕЛЕНИЯ, ОБОЗНАЧЕНИЯ И СОКРАЩЕНИЯ}
+    \section*{ТЕРМИНЫ И ОПРЕДЕЛЕНИЯ}
+    \addcontentsline{toc}{section}{ТЕРМИНЫ И ОПРЕДЕЛЕНИЯ}
     \input{#1}
 }
 
