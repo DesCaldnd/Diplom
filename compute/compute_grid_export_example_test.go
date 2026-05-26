@@ -122,12 +122,12 @@ func Example_export2DGridsForVisualization() {
 	}
 	flutterSimpleMin := compute.Point{0.0, 0.0}
 	flutterSimpleMax := compute.Point{4.0, 2.0}
-	flutterSimpleGrid, err := compute.NewAdaptiveSparseGrid(flutterSimple, flutterSimpleMin, flutterSimpleMax, 0.001, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+	flutterSimpleGrid, err := compute.NewAdaptiveSparseGrid(flutterSimple, flutterSimpleMin, flutterSimpleMax, 0.00001, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	if err := saveGridJSONExample(outDir, "flutter_simple_eps_0.001", flutterSimpleMin, flutterSimpleMax, 0.001, compute.BasisTypeQuadratic, buildType, flutterSimpleGrid); err != nil {
+	if err := saveGridJSONExample(outDir, "flutter_simple_eps_0.00001", flutterSimpleMin, flutterSimpleMax, 0.00001, compute.BasisTypeQuadratic, buildType, flutterSimpleGrid); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -147,12 +147,12 @@ func Example_export2DGridsForVisualization() {
 	}
 	flutterDiffMin := compute.Point{-2.0, 0.0}
 	flutterDiffMax := compute.Point{5.0, 1.0}
-	flutterDiffGrid, err := compute.NewAdaptiveSparseGrid(flutterDiff, flutterDiffMin, flutterDiffMax, 0.001, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+	flutterDiffGrid, err := compute.NewAdaptiveSparseGrid(flutterDiff, flutterDiffMin, flutterDiffMax, 0.00001, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	if err := saveGridJSONExample(outDir, "flutter_differential_eps_0.001", flutterDiffMin, flutterDiffMax, 0.001, compute.BasisTypeQuadratic, buildType, flutterDiffGrid); err != nil {
+	if err := saveGridJSONExample(outDir, "flutter_differential_eps_0.00001", flutterDiffMin, flutterDiffMax, 0.00001, compute.BasisTypeQuadratic, buildType, flutterDiffGrid); err != nil {
 		fmt.Println(err)
 		return
 	}
