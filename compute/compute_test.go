@@ -143,17 +143,19 @@ func TestMultidimFunction(t *testing.T) {
 // Проверяется интерполяция решения дифференциального уравнения dx/dt = -x.
 // Сравнивается с эталонным аналитическим решением.
 func TestDifferentialEquation(t *testing.T) {
-	diffEq := func(state compute.Point, t float64) compute.Point {
-		return compute.Point{-state[0]}
+	diffEq2D := func(state compute.Point, t float64) compute.Point {
+		x := state[0]
+		y := state[1]
+		return compute.Point{-y / (1 + math.Sqrt(x*x+y*y)), -x / (1 + math.Sqrt(x*x+y*y))}
 	}
+	min := compute.Point{-1.0, 0.0}
+	max := compute.Point{1.0, 1.0}
+	diffTMax := 5.0
+	epsilon := 0.0000001
 
-	funcEval := func(initialState compute.Point) (compute.Point, error) {
-		return integrateRk4(diffEq, initialState, 0.0, 1.0, 100), nil
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq2D, arg, 0.0, diffTMax, 50), nil
 	}
-
-	min := compute.Point{0.0}
-	max := compute.Point{5.0}
-	epsilon := 0.001
 
 	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 	if err != nil {
@@ -161,10 +163,10 @@ func TestDifferentialEquation(t *testing.T) {
 	}
 
 	testPoints := []compute.Point{
-		{0.0}, {5.0}, {2.5}, {1.0}, {2.0}, {3.14}, {4.99},
+		{0.5, 0.5}, {-0.3, 0.7}, {0.0, 0.0}, {0.9, 0.1}, {0.1, 0.9}, {-0.85235, 0.2367},
 	}
-	for i := 0; i < 10; i++ {
-		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
+	for i := 0; i < 50000; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0]), min[1] + rand.Float64()*(max[1]-min[1])})
 	}
 
 	for _, testPoint := range testPoints {
@@ -174,7 +176,7 @@ func TestDifferentialEquation(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(result[0]-expected[0]) > epsilon*4 {
+		if math.Abs(result[0]-expected[0]) > 0.01 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}

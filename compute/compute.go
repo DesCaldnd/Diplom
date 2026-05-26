@@ -432,11 +432,13 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			directions[i] = directionBoth
 		}
 
-		levelSum := int64(0)
+		level := int64(0)
 		for _, l := range currentNode.key.level {
-			levelSum += l
+			if l > level {
+				level = l
+			}
 		}
-		weight := math.Pow(2.0, -float64(levelSum))
+		weight := math.Pow(2.0, -float64(level))
 		if canContinueForce || currentNode.alpha.Length()*weight <= epsilon {
 			for i := range directions {
 				directions[i] = directionNone
@@ -642,11 +644,13 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 	}
 
 	canContinueForce := maxLvl >= 64
-	levelSum := int64(0)
-	for _, l := range currentNode.key.level {
-		levelSum += l
-	}
-	weight := math.Pow(2.0, -float64(levelSum))
+	level := int64(0)
+		for _, l := range currentNode.key.level {
+			if l > level {
+				level = l
+			}
+		}
+		weight := math.Pow(2.0, -float64(level))
 	canContinue := canContinueForce || (currentNode.alpha.Length()*weight) <= epsilon
 	var directions []direction
 

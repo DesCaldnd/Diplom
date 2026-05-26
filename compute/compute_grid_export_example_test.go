@@ -227,6 +227,37 @@ func Example_export2DGridsForVisualization() {
 		return
 	}
 
+	threeDimFunc := func(arg compute.Point) (compute.Point, error) {
+		x := arg[0]
+		y := arg[1]
+		z := arg[2]
+
+		u := x/2.0 - 1.0
+		v := y/2.0 - 1.0
+		w := z/2.0 - 1.0
+		r2 := u*u + v*v + w*w
+		radial := math.Sqrt(r2 + 0.08)
+		swirl := math.Atan2(v+0.35*math.Sin(2.4*w), u+0.35*math.Cos(2.1*w))
+		tube := math.Exp(-5.5 * math.Pow(radial-0.58-0.12*math.Sin(3.0*w+2.0*u*v), 2))
+		core := math.Exp(-2.0 * r2)
+		interaction := math.Sin(9.0*(u*v+v*w+w*u) + 3.5*swirl)
+		braid := math.Cos(7.0*(u-v)*w + 4.0*math.Sin(2.0*u+v*w))
+		ridge := math.Exp(-7.0 * math.Pow(u+0.45*math.Sin(2.6*v+1.7*w), 2))
+		value := tube*interaction + 0.65*core*braid + 0.45*ridge*math.Sin(8.0*v*w+3.0*u)
+		return compute.Point{value}, nil
+	}
+	threeDimMin, threeDimMax := makeDomain(3, 4.0)
+	threeDimEps := 0.001
+	threeDimGrid, err := compute.NewAdaptiveSparseGrid(threeDimFunc, threeDimMin, threeDimMax, threeDimEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := saveGridJSONExample(outDir, "three_dim_eps_0.001", threeDimMin, threeDimMax, threeDimEps, compute.BasisTypeQuadratic, buildType, threeDimGrid); err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	fmt.Println("exported grid json files")
 	// Output: exported grid json files
 }
