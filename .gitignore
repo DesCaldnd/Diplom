@@ -20,3 +20,4 @@ _deps
 CMakeUserPresets.json
 
 scripts/grid_data/*.json
+deploy/docker-compose/certs/
