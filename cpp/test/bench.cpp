@@ -193,7 +193,7 @@ TEST(ComputeBenchmark, DifferentialEquationApproaches) {
       return integrate_rk4(diff_eq, Compute::Point<2>{state[0], state[1]}, 0, 1, 25);
     };
 
-    bench(fmt::format("t_as_interval_uncertainty_tMax_{}", t_max), 40, [&]() {
+    bench(fmt::format("t_as_interval_uncertainty_tMax_{}", t_max), 5, [&]() {
       Compute::Point<3> min = {-1, 0, 0},
                         max = {1, 1, static_cast<Compute::ScalarType>(t_max)};
       volatile Compute::AdaptiveSparseGrid grid(
@@ -201,7 +201,7 @@ TEST(ComputeBenchmark, DifferentialEquationApproaches) {
           DefaultBuildType);
     });
 
-    bench(fmt::format("iterative_make_next_iteration_tMax_{}", t_max), 40,
+    bench(fmt::format("iterative_make_next_iteration_tMax_{}", t_max), 5,
           [&]() {
             Compute::Point<2> min = {-1, 0}, max = {1, 1};
             Compute::AdaptiveSparseGrid grid(integrate1s, min, max, 0.001, {},
