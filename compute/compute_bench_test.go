@@ -33,7 +33,7 @@ func makeSmoothFunction(dim int) func(compute.Point) (compute.Point, error) {
 		res := 0.0
 		for i := 0; i < dim; i++ {
 			freq := float64(i + 1)
-			res += math.Sin(freq*arg[i]) * math.Cos(arg[0]*arg[i]/(freq+1.0)) + math.Tan(0.1*arg[i])
+			res += math.Sin(freq*arg[i])*math.Cos(arg[0]*arg[i]/(freq+1.0)) + math.Tan(0.1*arg[i])
 		}
 		return compute.Point{res}, nil
 	}

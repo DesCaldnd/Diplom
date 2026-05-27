@@ -645,12 +645,12 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 
 	canContinueForce := maxLvl >= 64
 	level := int64(0)
-		for _, l := range currentNode.key.level {
-			if l > level {
-				level = l
-			}
+	for _, l := range currentNode.key.level {
+		if l > level {
+			level = l
 		}
-		weight := math.Pow(2.0, -float64(level))
+	}
+	weight := math.Pow(2.0, -float64(level))
 	canContinue := canContinueForce || (currentNode.alpha.Length()*weight) <= epsilon
 	var directions []direction
 

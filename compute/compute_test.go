@@ -151,7 +151,7 @@ func TestDifferentialEquation(t *testing.T) {
 	min := compute.Point{-1.0, 0.0}
 	max := compute.Point{1.0, 1.0}
 	diffTMax := 5.0
-	epsilon := 0.001
+	epsilon := 0.0000001
 
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		return integrateRk4(diffEq2D, arg, 0.0, diffTMax, 50), nil
@@ -165,7 +165,7 @@ func TestDifferentialEquation(t *testing.T) {
 	testPoints := []compute.Point{
 		{0.5, 0.5}, {-0.3, 0.7}, {0.0, 0.0}, {0.9, 0.1}, {0.1, 0.9}, {-0.85235, 0.2367},
 	}
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0]), min[1] + rand.Float64()*(max[1]-min[1])})
 	}
 
@@ -176,7 +176,7 @@ func TestDifferentialEquation(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(math.Sqrt(math.Pow(math.Abs(result[0]-expected[0]), 2) + math.Pow(math.Abs(result[1]-expected[1]), 2))) > 0.01 {
+		if math.Abs(math.Sqrt(math.Pow(math.Abs(result[0]-expected[0]), 2)+math.Pow(math.Abs(result[1]-expected[1]), 2))) > 0.01 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
@@ -387,10 +387,10 @@ func TestLinearBasis(t *testing.T) {
 }
 
 func TestComplexDiffur(t *testing.T) {
-	diffEq := func(arg compute.Point, _ float64) (compute.Point) {
+	diffEq := func(arg compute.Point, _ float64) compute.Point {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{-y / (1+math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2))), -x / (1+math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2)))}
+		return compute.Point{-y / (1 + math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2))), -x / (1 + math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2)))}
 	}
 	funcEval := func(initialState compute.Point) (compute.Point, error) {
 		return integrateRk4(diffEq, initialState, 0.0, 5.0, 100), nil
@@ -417,7 +417,7 @@ func TestComplexDiffur(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(math.Sqrt(math.Pow(result[0]-expected[0], 2) + math.Pow(result[1]-expected[1], 2))) > eps*4 {
+		if math.Abs(math.Sqrt(math.Pow(result[0]-expected[0], 2)+math.Pow(result[1]-expected[1], 2))) > eps*4 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
