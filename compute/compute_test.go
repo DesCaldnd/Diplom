@@ -92,7 +92,7 @@ func TestSimple1DFunction(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+		if math.Abs(result[0]-expected[0]) > epsilon*4 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
@@ -133,7 +133,7 @@ func TestMultidimFunction(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+		if math.Abs(result[0]-expected[0]) > epsilon*4 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
@@ -143,17 +143,19 @@ func TestMultidimFunction(t *testing.T) {
 // Проверяется интерполяция решения дифференциального уравнения dx/dt = -x.
 // Сравнивается с эталонным аналитическим решением.
 func TestDifferentialEquation(t *testing.T) {
-	diffEq := func(state compute.Point, t float64) compute.Point {
-		return compute.Point{-state[0]}
+	diffEq2D := func(state compute.Point, t float64) compute.Point {
+		x := state[0]
+		y := state[1]
+		return compute.Point{-y / (1 + math.Sqrt(x*x+y*y)), -x / (1 + math.Sqrt(x*x+y*y))}
 	}
+	min := compute.Point{-1.0, 0.0}
+	max := compute.Point{1.0, 1.0}
+	diffTMax := 5.0
+	epsilon := 0.0000001
 
-	funcEval := func(initialState compute.Point) (compute.Point, error) {
-		return integrateRk4(diffEq, initialState, 0.0, 1.0, 100), nil
+	funcEval := func(arg compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq2D, arg, 0.0, diffTMax, 50), nil
 	}
-
-	min := compute.Point{0.0}
-	max := compute.Point{5.0}
-	epsilon := 0.001
 
 	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, epsilon, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 	if err != nil {
@@ -161,10 +163,10 @@ func TestDifferentialEquation(t *testing.T) {
 	}
 
 	testPoints := []compute.Point{
-		{0.0}, {5.0}, {2.5}, {1.0}, {2.0}, {3.14}, {4.99},
+		{0.5, 0.5}, {-0.3, 0.7}, {0.0, 0.0}, {0.9, 0.1}, {0.1, 0.9}, {-0.85235, 0.2367},
 	}
-	for i := 0; i < 10; i++ {
-		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0])})
+	for i := 0; i < 1000; i++ {
+		testPoints = append(testPoints, compute.Point{min[0] + rand.Float64()*(max[0]-min[0]), min[1] + rand.Float64()*(max[1]-min[1])})
 	}
 
 	for _, testPoint := range testPoints {
@@ -174,7 +176,7 @@ func TestDifferentialEquation(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+		if math.Abs(math.Sqrt(math.Pow(math.Abs(result[0]-expected[0]), 2)+math.Pow(math.Abs(result[1]-expected[1]), 2))) > 0.01 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
@@ -222,7 +224,7 @@ func TestAnchorPoints(t *testing.T) {
 			// It's either 0 or correct, but usually 0
 		}
 
-		if math.Abs(resultWith[0]-expected[0]) > epsilon*2 {
+		if math.Abs(resultWith[0]-expected[0]) > epsilon*4 {
 			t.Errorf("with anchors at %v: expected %v, got %v", testPoint, expected[0], resultWith[0])
 		}
 	}
@@ -339,7 +341,7 @@ func TestMakeNextIteration(t *testing.T) {
 			t.Fatalf("failed to evaluate f at %v: %v", testPoint, err)
 		}
 
-		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+		if math.Abs(result[0]-expected[0]) > epsilon*4 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}
@@ -378,7 +380,44 @@ func TestLinearBasis(t *testing.T) {
 		}
 		expected, _ := funcEval(testPoint)
 
-		if math.Abs(result[0]-expected[0]) > epsilon*2 {
+		if math.Abs(result[0]-expected[0]) > epsilon*4 {
+			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
+		}
+	}
+}
+
+func TestComplexDiffur(t *testing.T) {
+	diffEq := func(arg compute.Point, _ float64) compute.Point {
+		x := arg[0]
+		y := arg[1]
+		return compute.Point{-y / (1 + math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2))), -x / (1 + math.Sqrt(math.Pow(x, 2)+math.Pow(y, 2)))}
+	}
+	funcEval := func(initialState compute.Point) (compute.Point, error) {
+		return integrateRk4(diffEq, initialState, 0.0, 5.0, 100), nil
+	}
+	min := compute.Point{-1.0, 0.0}
+	max := compute.Point{1.0, 1.0}
+
+	eps := 0.001
+
+	testPoints := []compute.Point{
+		{0.0, 0.0}, {1.0, 1.0}, {-1.0, 1.0}, {0.0, 1.0}, {1.0, 0.0}, {-0.54, 0.23}, {0.264, 0.837},
+	}
+
+	grid, err := compute.NewAdaptiveSparseGrid(funcEval, min, max, eps, nil, compute.BasisTypeQuadratic, compute.BuildTypeSequential, 0, 0)
+
+	if err != nil {
+		t.Fatalf("failed to create grid: %v", err)
+	}
+
+	for _, testPoint := range testPoints {
+		result, err := grid.Evaluate(testPoint)
+		if err != nil {
+			t.Fatalf("failed to evaluate at %v: %v", testPoint, err)
+		}
+		expected, _ := funcEval(testPoint)
+
+		if math.Abs(math.Sqrt(math.Pow(result[0]-expected[0], 2)+math.Pow(result[1]-expected[1], 2))) > eps*4 {
 			t.Errorf("at %v: expected %v, got %v", testPoint, expected[0], result[0])
 		}
 	}

@@ -43,6 +43,8 @@ export namespace std
     using std::abs;
     using std::sin;
     using std::cos;
+    using std::pow;
+    using std::max;
     using std::same_as;
     using std::unordered_map;
     using std::unordered_set;

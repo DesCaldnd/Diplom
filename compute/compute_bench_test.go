@@ -33,7 +33,7 @@ func makeSmoothFunction(dim int) func(compute.Point) (compute.Point, error) {
 		res := 0.0
 		for i := 0; i < dim; i++ {
 			freq := float64(i + 1)
-			res += math.Sin(freq*arg[i]) * math.Cos(arg[i]/(freq+1.0))
+			res += math.Sin(freq*arg[i])*math.Cos(arg[0]*arg[i]/(freq+1.0)) + math.Tan(0.1*arg[i])
 		}
 		return compute.Point{res}, nil
 	}
@@ -80,7 +80,8 @@ func BenchmarkParallelVsSequentialBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(3*x) * math.Cos(25*y)}, nil
+		value := math.Sin(3*x) + 0.35*math.Cos(25*y) + 0.2*math.Sin(7*x+2.5) - 0.15*math.Cos(11*y-1.0)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -117,12 +118,13 @@ func BenchmarkLinearVsQuadraticBasis(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
+		value := math.Sin(15*x) + 0.6*math.Cos(40*y) + 0.2*math.Sin(31*x+0.3) - 0.12*math.Cos(19*y-0.7) + math.Sin(x*y)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
 	max := compute.Point{math.Pi, math.Pi}
-	epsValues := []float64{1e-2, 5e-3, 1e-3}
+	epsValues := []float64{1e-2, 5e-3, 1e-3, 1e-4, 1e-5, 5e-6, 1e-6}
 
 	for _, eps := range epsValues {
 		b.Run("linear_eps_"+strconv.FormatFloat(eps, 'g', -1, 64), func(b *testing.B) {
@@ -179,7 +181,9 @@ func BenchmarkAnchorPointsImpact(b *testing.B) {
 // 2. Последовательное применение make_next_iteration.
 func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 	diffEq := func(state compute.Point, t float64) compute.Point {
-		return compute.Point{-0.5 * state[0]}
+		x := state[0]
+		y := state[1]
+		return compute.Point{-y / (1 + math.Sqrt(x*x+y*y)), -x / (1 + math.Sqrt(x*x+y*y))}
 	}
 
 	tMaxValues := []float64{2.0, 5.0, 10.0, 20.0}
@@ -188,11 +192,12 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 		b.Run("t_as_interval_uncertainty_tMax_"+strconv.Itoa(int(tMax)), func(b *testing.B) {
 			funcWithT := func(arg compute.Point) (compute.Point, error) {
 				x0 := arg[0]
-				t := arg[1]
-				return integrateRk4(diffEq, compute.Point{x0}, 0.0, t, 50), nil
+				y0 := arg[1]
+				t := arg[2]
+				return integrateRk4(diffEq, compute.Point{x0, y0}, 0.0, t, 50), nil
 			}
-			min := compute.Point{0.0, 0.0}
-			max := compute.Point{10.0, tMax}
+			min := compute.Point{-1.0, 0.0, 0.0}
+			max := compute.Point{1.0, 1.0, tMax}
 			for i := 0; i < b.N; i++ {
 				_, err := compute.NewAdaptiveSparseGrid(funcWithT, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 				if err != nil {
@@ -205,8 +210,8 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 			integrate1s := func(state compute.Point) (compute.Point, error) {
 				return integrateRk4(diffEq, state, 0.0, 1.0, 25), nil
 			}
-			min := compute.Point{0.0}
-			max := compute.Point{10.0}
+			min := compute.Point{-1.0, 0.0}
+			max := compute.Point{1.0, 1.0}
 			for i := 0; i < b.N; i++ {
 				grid, err := compute.NewAdaptiveSparseGrid(integrate1s, min, max, 0.001, nil, compute.BasisTypeQuadratic, compute.BuildTypeParallel, 0, 0)
 				if err != nil {
@@ -228,7 +233,8 @@ func BenchmarkNodeLimitOptimization(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(5*x) + math.Cos(33*y)}, nil
+		value := math.Sin(5*x) + math.Cos(33*y) + 0.22*math.Sin(17*x+0.4) - 0.18*math.Cos(21*y-0.2)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0, 0}
@@ -253,7 +259,8 @@ func BenchmarkEvaluationCostAfterBuild(b *testing.B) {
 	funcEval := func(arg compute.Point) (compute.Point, error) {
 		x := arg[0]
 		y := arg[1]
-		return compute.Point{math.Sin(15*x) * math.Cos(40*y)}, nil
+		value := math.Sin(15*x) + 0.6*math.Cos(40*y) + 0.2*math.Sin(31*x+0.3) - 0.12*math.Cos(19*y-0.7) + math.Sin(x*y)
+		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0}
@@ -289,13 +296,13 @@ func BenchmarkFourDimensionalBuildTypeBasisProduct(b *testing.B) {
 		x2 := arg[1]
 		x3 := arg[2]
 		x4 := arg[3]
-		value := math.Sin(30*x1)*math.Cos(22.2323*x2) + math.Sin(70*x3) - 0.15*math.Sin(x4)
+		value := math.Sin(30*x1)*math.Cos(22.2323*x2) + math.Sin(70*x3) - 0.15*math.Sin(x4) + math.Cos(x1*x3)
 		return compute.Point{value}, nil
 	}
 
 	min := compute.Point{0.0, 0.0, 0.0, 0.0}
 	max := compute.Point{math.Pi, math.Pi, math.Pi, math.Pi}
-	epsilon := 0.000001
+	epsilon := 0.0000005
 
 	cases := []struct {
 		buildType compute.BuildType

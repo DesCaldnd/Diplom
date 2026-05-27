@@ -313,8 +313,6 @@ func (g *AdaptiveSparseGrid) build(
 			key.level[g.inDim-j-1] = 1
 		}
 
-		var results []buildResult
-
 		for {
 			indexPermutations := int64(1) << (g.inDim - i)
 
@@ -328,25 +326,22 @@ func (g *AdaptiveSparseGrid) build(
 				expandIndices(&currentKey, j, g.inDim)
 
 				res := g.buildGridTask(ctx, funcEval, epsilon, anchors, currentKey, i, buildType, maxLevel, maxNodesInGrid)
-				results = append(results, res)
+
+				if res.err != nil {
+					return res.err
+				}
+				ep := entryPoint{
+					node:       res.node,
+					dimensions: i,
+				}
+				g.entryPoints = append(g.entryPoints, ep)
+				for k, v := range res.newNodes {
+					g.nodes[k] = v
+				}
 			}
 
 			if !nextPermutation(key.level) {
 				break
-			}
-		}
-
-		for _, res := range results {
-			if res.err != nil {
-				return res.err
-			}
-			ep := entryPoint{
-				node:       res.node,
-				dimensions: i,
-			}
-			g.entryPoints = append(g.entryPoints, ep)
-			for k, v := range res.newNodes {
-				g.nodes[k] = v
 			}
 		}
 	}
@@ -437,7 +432,14 @@ func (g *AdaptiveSparseGrid) buildGrid(
 			directions[i] = directionBoth
 		}
 
-		if canContinueForce || currentNode.alpha.Length() <= epsilon {
+		level := int64(0)
+		for _, l := range currentNode.key.level {
+			if l > level {
+				level = l
+			}
+		}
+		weight := math.Pow(2.0, -float64(level))
+		if canContinueForce || currentNode.alpha.Length()*weight <= epsilon {
 			for i := range directions {
 				directions[i] = directionNone
 			}
@@ -574,7 +576,7 @@ func (g *AdaptiveSparseGrid) buildGridParallel(
 			}
 		}
 
-		if len(nextDepthKeys) < 2*NODE_PARALLEL {
+		if len(nextDepthKeys) < 3*NODE_PARALLEL {
 			for i, childKey := range nextDepthKeys {
 				createdNode, err := g.buildNode(funcEval, childKey, &activeEntryNode, dimension, newNodes, currentDepth+1)
 				if err != nil {
@@ -642,7 +644,14 @@ func (g *AdaptiveSparseGrid) processNodeForBuildGrid(
 	}
 
 	canContinueForce := maxLvl >= 64
-	canContinue := canContinueForce || currentNode.alpha.Length() <= epsilon
+	level := int64(0)
+	for _, l := range currentNode.key.level {
+		if l > level {
+			level = l
+		}
+	}
+	weight := math.Pow(2.0, -float64(level))
+	canContinue := canContinueForce || (currentNode.alpha.Length()*weight) <= epsilon
 	var directions []direction
 
 	if canContinue && !canContinueForce {
