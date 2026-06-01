@@ -184,47 +184,52 @@ func Example_export2DGridsForVisualization() {
 		return
 	}
 
-	diffEq2D := func(state compute.Point, t float64) compute.Point {
-		x := state[0]
-		y := state[1]
-		return compute.Point{-y / (1 + math.Sqrt(x*x+y*y)), -x / (1 + math.Sqrt(x*x+y*y))}
-	}
-	diffMin := compute.Point{-1.0, 0.0}
-	diffMax := compute.Point{1.0, 1.0}
-	diffEps := 0.001
-	diffTMax := 5.0
+	var diffurMaxTimes = []float64{2.0, 5.0, 10.0, 20.0}
 
-	diffIntervalAtTMax := func(arg compute.Point) (compute.Point, error) {
-		return integrateRk4(diffEq2D, arg, 0.0, diffTMax, 50), nil
-	}
-	diffIntervalGrid, err := compute.NewAdaptiveSparseGrid(diffIntervalAtTMax, diffMin, diffMax, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if err := saveGridJSONExample(outDir, "diffur_interval_tmax_5_eps_0.001", diffMin, diffMax, diffEps, compute.BasisTypeQuadratic, buildType, diffIntervalGrid); err != nil {
-		fmt.Println(err)
-		return
-	}
+	for _, maxTime := range diffurMaxTimes {
+		diffEq2D := func(state compute.Point, t float64) compute.Point {
+			x := state[0]
+			y := state[1]
+			return compute.Point{-y / (1 + math.Sqrt(x*x+y*y)), -x / (1 + math.Sqrt(x*x+y*y))}
+		}
+		diffMinIter := compute.Point{-1.0, 0.0}
+		diffMaxIter := compute.Point{1.0, 1.0}
+		diffMinInter := compute.Point{-1.0, 0.0, 0}
+		diffMaxInter := compute.Point{1.0, 1.0, maxTime}
+		diffEps := 0.001
 
-	diffIterStep := func(state compute.Point) (compute.Point, error) {
-		return integrateRk4(diffEq2D, state, 0.0, 1.0, 25), nil
-	}
-	diffIterGrid, err := compute.NewAdaptiveSparseGrid(diffIterStep, diffMin, diffMax, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	for step := 1; step < int(diffTMax); step++ {
-		diffIterGrid, err = diffIterGrid.MakeNextIteration(diffIterStep, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+		diffIntervalAtTMax := func(arg compute.Point) (compute.Point, error) {
+			return integrateRk4(diffEq2D, arg[0:2], 0.0, arg[2], int(arg[2]/0.04)), nil
+		}
+		diffIntervalGrid, err := compute.NewAdaptiveSparseGrid(diffIntervalAtTMax, diffMinInter, diffMaxInter, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-	}
-	if err := saveGridJSONExample(outDir, "diffur_iterative_tmax_5_eps_0.001", diffMin, diffMax, diffEps, compute.BasisTypeQuadratic, buildType, diffIterGrid); err != nil {
-		fmt.Println(err)
-		return
+		if err := saveGridJSONExample(outDir, fmt.Sprintf("diffur_interval_tmax_%d_eps_0.001", int(maxTime)), diffMinInter, diffMaxInter, diffEps, compute.BasisTypeQuadratic, buildType, diffIntervalGrid); err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		diffIterStep := func(state compute.Point) (compute.Point, error) {
+			return integrateRk4(diffEq2D, state, 0.0, 1.0, 25), nil
+		}
+		diffIterGrid, err := compute.NewAdaptiveSparseGrid(diffIterStep, diffMinIter, diffMaxIter, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		for step := 1; step < int(maxTime); step++ {
+			diffIterGrid, err = diffIterGrid.MakeNextIteration(diffIterStep, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}
+		if err := saveGridJSONExample(outDir, fmt.Sprintf("diffur_iterative_tmax_%d_eps_0.001", int(maxTime)), diffMinIter, diffMaxIter, diffEps, compute.BasisTypeQuadratic, buildType, diffIterGrid); err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
 	threeDimFunc := func(arg compute.Point) (compute.Point, error) {

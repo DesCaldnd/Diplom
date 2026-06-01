@@ -194,7 +194,7 @@ func BenchmarkDifferentialEquationApproaches(b *testing.B) {
 				x0 := arg[0]
 				y0 := arg[1]
 				t := arg[2]
-				return integrateRk4(diffEq, compute.Point{x0, y0}, 0.0, t, 50), nil
+				return integrateRk4(diffEq, compute.Point{x0, y0}, 0.0, t, int(t/0.04)), nil
 			}
 			min := compute.Point{-1.0, 0.0, 0.0}
 			max := compute.Point{1.0, 1.0, tMax}
