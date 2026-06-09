@@ -55,15 +55,17 @@ def parse_args():
         help="Output image path",
     )
     parser.add_argument("--width", type=int, default=1600, help="Image width")
-    parser.add_argument("--height", type=int, default=800, help="Image height")
-    parser.add_argument("--padding", type=int, default=30, help="Canvas padding")
-    parser.add_argument("--azimuth", type=float, default=-18.0, help="Rotation of box faces toward the viewer")
+    parser.add_argument("--height", type=int, default=630, help="Image height")
+    parser.add_argument("--padding", type=int, default=80, help="Canvas padding")
+    parser.add_argument("--azimuth", type=float, default=-20.0, help="Rotation of box faces toward the viewer")
     parser.add_argument("--elevation", type=float, default=-8.0, help="Tilt angle")
-    parser.add_argument("--point-radius", type=int, default=2, help="Node radius")
+    parser.add_argument("--point-radius", type=int, default=1, help="Node radius")
     parser.add_argument("--edge-width", type=int, default=3, help="Edge width")
     parser.add_argument("--font-size", type=int, default=28, help="Label font size")
     parser.add_argument("--time-font-size", type=int, default=24, help="Time tick font size")
     parser.add_argument("--time-depth-scale", type=float, default=3.04, help="Relative visible depth of time axis")
+    parser.add_argument("--box-height", type=float, default=0.5, help="Relative height of the box")
+    parser.add_argument("--box-depth", type=float, default=0.5, help="Relative depth of the box")
     return parser.parse_args()
 
 
@@ -120,27 +122,29 @@ def fit_projection(rotated_points, width, height, padding, bottom_reserved):
     return scale, center
 
 
-def normalize_point(point, mins, maxs, time_depth_scale):
+def normalize_point(point, mins, maxs, time_depth_scale, box_height, box_depth):
     time_fraction = (point[2] - mins[2]) / (maxs[2] - mins[2])
     x = (time_fraction - 0.5) * time_depth_scale
-    y = (point[1] - mins[1]) / (maxs[1] - mins[1]) - 0.5
-    z = (point[0] - mins[0]) / (maxs[0] - mins[0]) - 0.5
+    y = ((point[1] - mins[1]) / (maxs[1] - mins[1]) - 0.5) * box_height
+    z = ((point[0] - mins[0]) / (maxs[0] - mins[0]) - 0.5) * box_depth
     return x, y, z
 
 
-def build_box_corners(time_depth_scale):
+def build_box_corners(time_depth_scale, box_height, box_depth):
     half_time = time_depth_scale / 2.0
+    half_height = box_height / 2.0
+    half_depth = box_depth / 2.0
     front_offset = 0.0
     back_offset = 0.0
     return [
-        (-half_time, -0.5, -0.5 + front_offset),
-        (half_time, -0.5, -0.5 + back_offset),
-        (half_time, 0.5, -0.5 + back_offset),
-        (-half_time, 0.5, -0.5 + front_offset),
-        (-half_time, -0.5, 0.5 + front_offset),
-        (half_time, -0.5, 0.5 + back_offset),
-        (half_time, 0.5, 0.5 + back_offset),
-        (-half_time, 0.5, 0.5 + front_offset),
+        (-half_time, -half_height, -half_depth + front_offset),
+        (half_time, -half_height, -half_depth + back_offset),
+        (half_time, half_height, -half_depth + back_offset),
+        (-half_time, half_height, -half_depth + front_offset),
+        (-half_time, -half_height, half_depth + front_offset),
+        (half_time, -half_height, half_depth + back_offset),
+        (half_time, half_height, half_depth + back_offset),
+        (-half_time, half_height, half_depth + front_offset),
     ]
 
 
@@ -171,9 +175,9 @@ def main():
     if len(mins) != 3 or len(maxs) != 3:
         raise ValueError("Interval visualization expects a 3D grid JSON")
 
-    corners = build_box_corners(args.time_depth_scale)
+    corners = build_box_corners(args.time_depth_scale, args.box_height, args.box_depth)
     normalized_nodes = [
-        normalize_point(node["CenterUnit"], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], args.time_depth_scale)
+        normalize_point(node["CenterUnit"], [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], args.time_depth_scale, args.box_height, args.box_depth)
         for node in nodes
     ]
 
@@ -183,7 +187,17 @@ def main():
     rotated_nodes = [rotate_point(point, azimuth, elevation) for point in normalized_nodes]
 
     bottom_reserved = 150
-    scale, center = fit_projection(rotated_corners + rotated_nodes, args.width, args.height, args.padding, bottom_reserved)
+    box_xs = [point[0] for point in rotated_corners]
+    box_ys = [point[1] for point in rotated_corners]
+    span_x = max(box_xs) - min(box_xs)
+    span_y = max(box_ys) - min(box_ys)
+    usable_width = args.width - 2 * args.padding
+    usable_height = args.height - 2 * args.padding - bottom_reserved
+    scale = min(usable_width / max(span_x, 1e-9), usable_height / max(span_y, 1e-9))
+    center = (
+        args.padding - min(box_xs) * scale,
+        args.padding + max(box_ys) * scale,
+    )
     projected_corners = [project(point, scale, center) for point in rotated_corners]
 
     image = Image.new("RGBA", (args.width, args.height), BACKGROUND_COLOR + (255,))

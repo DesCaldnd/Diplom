@@ -34,12 +34,14 @@ def parse_args():
         help="Output image path",
     )
     parser.add_argument("--width", type=int, default=1600, help="Image width")
-    parser.add_argument("--height", type=int, default=800, help="Image height")
+    parser.add_argument("--height", type=int, default=630, help="Image height")
     parser.add_argument("--padding", type=int, default=80, help="Canvas padding")
-    parser.add_argument("--azimuth", type=float, default=-18.0, help="Rotation of book faces toward the viewer")
+    parser.add_argument("--azimuth", type=float, default=-20.0, help="Rotation of book faces toward the viewer")
     parser.add_argument("--elevation", type=float, default=-8.0, help="Tilt angle")
-    parser.add_argument("--slice-gap", type=float, default=0.18, help="Gap between slices in normalized units")
-    parser.add_argument("--point-radius", type=int, default=2, help="Node radius")
+    parser.add_argument("--slice-gap", type=float, default=0.16, help="Gap between slices in normalized units")
+    parser.add_argument("--box-height", type=float, default=0.5, help="Relative height of the box")
+    parser.add_argument("--box-depth", type=float, default=0.5, help="Relative depth of the box")
+    parser.add_argument("--point-radius", type=int, default=1, help="Node radius")
     parser.add_argument("--edge-width", type=int, default=3, help="Visible slice edge width")
     parser.add_argument("--dash-width", type=int, default=2, help="Dashed slice edge width")
     parser.add_argument("--font-size", type=int, default=28, help="Label font size")
@@ -103,24 +105,25 @@ def centered_xy(unit_xy):
     return unit_xy[0] - 0.5, unit_xy[1] - 0.5
 
 
-def build_slice_geometry(times, slice_gap, data_by_time):
+def build_slice_geometry(times, slice_gap, data_by_time, box_height, box_depth):
     slices = []
     max_shift = (max(times) - min(times)) * slice_gap
-    face_depth = 0.34
+    half_height = box_height / 2.0
+    face_depth = box_depth / 2.0
     for time_value in times:
         x_shift = (time_value - min(times)) * slice_gap - max_shift / 2.0
         corners = [
-            (x_shift, -0.5, -face_depth),
-            (x_shift, -0.5, face_depth),
-            (x_shift, 0.5, face_depth),
-            (x_shift, 0.5, -face_depth),
+            (x_shift, -half_height, -face_depth),
+            (x_shift, -half_height, face_depth),
+            (x_shift, half_height, face_depth),
+            (x_shift, half_height, -face_depth),
         ]
         nodes = []
         if time_value in data_by_time:
             for node in data_by_time[time_value]["nodes"]:
                 x, y = centered_xy(node["CenterUnit"])
-                depth = x * face_depth * 2.0
-                nodes.append((x_shift, y, depth))
+                depth = x * box_depth
+                nodes.append((x_shift, y * box_height, depth))
         slices.append({
             "time": time_value,
             "realized": time_value in data_by_time,
@@ -192,7 +195,7 @@ def main():
         path = input_dir / f"diffur_iterative_tmax_{time_value}_eps_0.001.json"
         data_by_time[time_value] = load_json(path)
 
-    slices = build_slice_geometry(KNOWN_TIMES, args.slice_gap, data_by_time)
+    slices = build_slice_geometry(KNOWN_TIMES, args.slice_gap, data_by_time, args.box_height, args.box_depth)
     azimuth = math.radians(args.azimuth)
     elevation = math.radians(args.elevation)
 

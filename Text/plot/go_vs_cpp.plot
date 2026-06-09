@@ -1,8 +1,8 @@
 # Настройка формата вывода (окно на Mac)
-set terminal qt font "Consolas,16" size 1000,600
+set terminal qt font "Consolas,22" size 1000,600
 
 
-set xlabel "Глубина просчета"
+set xlabel "Модельное время, t"
 set ylabel "Время выполнения (mcs)"
 
 # Настройка сетки

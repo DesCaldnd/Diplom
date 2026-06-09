@@ -285,12 +285,12 @@ TEST(ComputeBenchmark, FourDimensionalBuildTypeBasisProduct) {
     {Compute::BuildType::SEQUENTIAL, Compute::BasisType::LINEAR, "sequential_linear"},
     {Compute::BuildType::SEQUENTIAL, Compute::BasisType::QUADRATIC, "sequential_quadratic"},
   };
-  Compute::ScalarType epsilon = 0.0000005;
+  Compute::ScalarType epsilon = 0.0000001;
   Compute::Point<4> min = 0, max = Pi;
 
   for (auto test_case : test_cases)
   {
-    bench(test_case.name, 10, [&]() {
+    bench(test_case.name, 2, [&]() {
       volatile Compute::AdaptiveSparseGrid grid(func_eval, min, max, epsilon, {}, test_case.basis_type, test_case.build_type);
     });
   }

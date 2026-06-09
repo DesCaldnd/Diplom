@@ -1,5 +1,5 @@
 # Настройка формата вывода (окно на Mac)
-set terminal qt font "Consolas,16" size 1000,600
+set terminal qt font "Consolas,22" size 1000,600
 
 
 set xlabel "Точность"
@@ -10,7 +10,7 @@ set grid
 set key left top  # Расположение легенды
 
 # Определяем масштаб по оси X (чтобы метки были красивыми)
-set xtics ( "1e-2" 1, "5e-3" 2, "1e-3" 3, "1e-4" 4, "1e-6" 5, "5e-7" 6, "1e-7" 7 )
+set xtics ( "1e-2" 1, "5e-3" 2, "1e-3" 3, "1e-4" 4, "1e-5" 5, "5e-6" 6, "1e-6" 7 )
 set xrange [0.7:7.3]
 
 # Рисуем графики

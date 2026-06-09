@@ -1,5 +1,5 @@
 # Настройка формата вывода (окно на Mac)
-set terminal qt font "Consolas,16" size 1000,600
+set terminal qt font "Consolas,22" size 1000,600
 
 # Если хотите сохранить в файл, раскомментируйте следующие 2 строки:
 # set terminal pngcairo size 800,600 enhanced font "Arial,12"

@@ -43,6 +43,7 @@ func buildTypeNameForExport(buildType compute.BuildType) string {
 }
 
 func saveGridJSONExample(outDir string, name string, min, max compute.Point, epsilon float64, basis compute.BasisType, buildType compute.BuildType, grid *compute.AdaptiveSparseGrid) error {
+	nodes := grid.Nodes()
 	payload := exportedGridExample{
 		Name:      name,
 		Min:       min,
@@ -50,7 +51,7 @@ func saveGridJSONExample(outDir string, name string, min, max compute.Point, eps
 		Epsilon:   epsilon,
 		Basis:     basisNameForExport(basis),
 		BuildType: buildTypeNameForExport(buildType),
-		Nodes:     grid.Nodes(),
+		Nodes:     nodes,
 	}
 
 	data, err := json.MarshalIndent(payload, "", "  ")
@@ -59,6 +60,7 @@ func saveGridJSONExample(outDir string, name string, min, max compute.Point, eps
 	}
 
 	path := filepath.Join(outDir, name+".json")
+	fmt.Printf("%s has %d nodes\n", name, len(nodes))
 	return os.WriteFile(path, data, 0o644)
 }
 
@@ -79,28 +81,31 @@ func Example_export2DGridsForVisualization() {
 	}
 	comparisonMin := compute.Point{0.0, 0.0}
 	comparisonMax := compute.Point{math.Pi, math.Pi}
+	epsValues := []float64{1e-2, 5e-3, 1e-3, 1e-4, 1e-5, 5e-6, 1e-6}
 
-	linearGrid, err := compute.NewAdaptiveSparseGrid(comparisonFunc, comparisonMin, comparisonMax, 0.01, []compute.Point{{2, 2}, {2.2, 1}}, compute.BasisTypeLinear, buildType, 0, 0)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if err := saveGridJSONExample(outDir, "basis_linear_eps_0.01", comparisonMin, comparisonMax, 0.01, compute.BasisTypeLinear, buildType, linearGrid); err != nil {
-		fmt.Println(err)
-		return
+	for _, eps := range epsValues {
+		linearGrid, err := compute.NewAdaptiveSparseGrid(comparisonFunc, comparisonMin, comparisonMax, eps, nil, compute.BasisTypeLinear, buildType, 0, 0)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if err := saveGridJSONExample(outDir, fmt.Sprintf("basis_linear_eps_%g", eps), comparisonMin, comparisonMax, eps, compute.BasisTypeLinear, buildType, linearGrid); err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		quadraticGrid, err := compute.NewAdaptiveSparseGrid(comparisonFunc, comparisonMin, comparisonMax, eps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if err := saveGridJSONExample(outDir, fmt.Sprintf("basis_quadratic_eps_%g", eps), comparisonMin, comparisonMax, eps, compute.BasisTypeQuadratic, buildType, quadraticGrid); err != nil {
+			fmt.Println(err)
+			return
+		}
 	}
 
-	quadraticGrid, err := compute.NewAdaptiveSparseGrid(comparisonFunc, comparisonMin, comparisonMax, 0.01, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	if err := saveGridJSONExample(outDir, "basis_quadratic_eps_0.01", comparisonMin, comparisonMax, 0.01, compute.BasisTypeQuadratic, buildType, quadraticGrid); err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	epsValues := []float64{0.01, 0.005, 0.001}
+	epsValues = []float64{0.01, 0.005, 0.001}
 	for _, eps := range epsValues {
 		grid, err := compute.NewAdaptiveSparseGrid(comparisonFunc, comparisonMin, comparisonMax, eps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
 		if err != nil {
@@ -219,17 +224,20 @@ func Example_export2DGridsForVisualization() {
 			fmt.Println(err)
 			return
 		}
+		nodeCount := 0
 		for step := 1; step < int(maxTime); step++ {
 			diffIterGrid, err = diffIterGrid.MakeNextIteration(diffIterStep, diffEps, nil, compute.BasisTypeQuadratic, buildType, 0, 0)
 			if err != nil {
 				fmt.Println(err)
 				return
 			}
+			nodeCount += len(diffIterGrid.Nodes())
 		}
 		if err := saveGridJSONExample(outDir, fmt.Sprintf("diffur_iterative_tmax_%d_eps_0.001", int(maxTime)), diffMinIter, diffMaxIter, diffEps, compute.BasisTypeQuadratic, buildType, diffIterGrid); err != nil {
 			fmt.Println(err)
 			return
 		}
+		fmt.Printf("diffur_iterative_tmax_%d_eps_0.001 has overall nodes %d\n", int(maxTime), nodeCount)
 	}
 
 	threeDimFunc := func(arg compute.Point) (compute.Point, error) {

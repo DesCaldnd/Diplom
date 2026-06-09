@@ -1,12 +1,12 @@
 # Настройка терминала
-set terminal qt font "Consolas,16" size 1000,600
-set title "Время выполнения (mcs)" font "Consolas,16"
+set terminal qt font "Consolas,22" size 1000,600
+set title "Время выполнения (mcs)" font "Consolas,22"
 set ylabel "Микросекунды (mcs)"
 set grid y
 
 # --- ИСПРАВЛЕНИЯ ЗДЕСЬ ---
 set yrange [0:*]       # Начать отсчет Y с нуля
-set xrange [-0.5:1.5]  # Центрирование (для 2 групп данных)
+set xrange [0.5:2.5]  # Центрирование (для 2 групп данных)
 # -------------------------
 
 # Настройка стиля гистограмм
@@ -18,8 +18,8 @@ set boxwidth 0.8
 # Определяем блок данных заранее
 $MyData << EOD
 Label         Linear     Quadratic
-Parallel      557362     511620
-Sequential    1920580    1699398
+Parallel      5741631     3369355
+Sequential    25193296    14266548
 EOD
 
 # Рисуем
