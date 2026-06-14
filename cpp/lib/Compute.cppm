@@ -35,6 +35,8 @@ export namespace Compute
         using NodeSet = std::unordered_set<GridKey>;
 
     private:
+        static constexpr size_t NODE_PARALLEL = 32;
+
         Point min_;
         Point max_;
         BasisType basis_type_;
@@ -176,8 +178,6 @@ export namespace Compute
         {
             for (size_t i = 0; i <= IN_DIM; ++i)
             {
-                const auto launch_type = (build_type == BuildType::PARALLEL && i > 0 && i < IN_DIM - 1) ? std::launch::async : std::launch::deferred;
-
                 GridKey key;
                 key.level = 0;
                 key.index = 0;
@@ -186,8 +186,6 @@ export namespace Compute
                 {
                     key.level[IN_DIM - j - 1] = 1;
                 }
-
-                std::vector<std::future<std::pair<Node, NodeMap> > > futures;
 
                 do
                 {
@@ -198,30 +196,19 @@ export namespace Compute
                         expand_indicies(key, j);
                         NodeMap tmp;
                         Node node = tmp[create_node(func, key, {}, i, tmp).value()];
-                        futures.emplace_back(std::async(launch_type, &AdaptiveSparseGrid::build_grid<FUNC>,
-                                                        this, std::ref(func), epsilon, std::ref(anchors), node, i,
-                                                        max_level, max_nodes_in_grid,
-                                                        cancellation_flag));
+                        auto [res_node, new_nodes] = build_grid(func, epsilon, anchors, node, i,
+                                                                build_type, max_level, max_nodes_in_grid,
+                                                                cancellation_flag);
+                        EntryPoint entry_point;
+                        entry_point.dimensions = i;
+                        entry_point.node = res_node;
+                        entry_points_.push_back(entry_point);
+                        for (auto& kv : new_nodes)
+                        {
+                            nodes_.insert(kv);
+                        }
                     }
                 } while (std::ranges::next_permutation(key.level.coords).found);
-
-                for (auto &future: futures)
-                {
-                    future.wait();
-                }
-
-                for (auto &future: futures)
-                {
-                    auto [node, new_nodes] = future.get();
-                    EntryPoint entry_point;
-                    entry_point.dimensions = i;
-                    entry_point.node = node;
-                    entry_points_.push_back(entry_point);
-                    for (auto& kv : new_nodes)
-                    {
-                        nodes_.insert(kv);
-                    }
-                }
             }
         }
 
@@ -243,9 +230,16 @@ export namespace Compute
         template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
         std::pair<Node, NodeMap> build_grid(const FUNC &func, ScalarType epsilon,
                                             const std::vector<std::pair<Argument, Answer> > &anchors, Node entry_point,
-                                            size_t dimension, size_t max_level, size_t max_nodes_in_grid,
+                                            size_t dimension, BuildType build_type, size_t max_level,
+                                            size_t max_nodes_in_grid,
                                             std::optional<std::reference_wrapper<std::atomic_flag> > cancellation_flag)
         {
+            if (build_type == BuildType::PARALLEL)
+            {
+                return build_grid_parallel(func, epsilon, anchors, entry_point, dimension, max_level,
+                                           max_nodes_in_grid, cancellation_flag);
+            }
+
             std::queue<GridKey> node_queue;
             node_queue.push(entry_point.key);
             NodeMap new_nodes;
@@ -346,6 +340,189 @@ export namespace Compute
             return {ref_node, new_nodes};
         }
 
+        template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
+        std::pair<Node, NodeMap> build_grid_parallel(const FUNC &func, ScalarType epsilon,
+                                                     const std::vector<std::pair<Argument, Answer> > &anchors,
+                                                     Node entry_point, size_t dimension, size_t max_level,
+                                                     size_t max_nodes_in_grid,
+                                                     std::optional<std::reference_wrapper<std::atomic_flag> >
+                                                     cancellation_flag)
+        {
+            std::vector<GridKey> current_depth_keys;
+            current_depth_keys.push_back(entry_point.key);
+            NodeMap new_nodes;
+            new_nodes.emplace(entry_point.key, entry_point);
+
+            const GridKey entry_point_key = entry_point.key;
+            size_t current_max_level = entry_point.key.level.max();
+
+            while (!current_depth_keys.empty())
+            {
+                if (cancellation_flag.has_value() && cancellation_flag.value().get().test())
+                {
+                    auto str = fmt::format("Interrupted at node count: {}, dimension: {}, max level: {}",
+                                           new_nodes.size(), dimension, current_max_level);
+                    std::cerr << str << std::endl;
+                    throw std::runtime_error(str);
+                }
+
+                Node active_entry_node = new_nodes[entry_point_key];
+
+                std::vector<GridKey> next_depth_keys;
+                NodeSet next_depth_known;
+
+                for (const auto &current_key: current_depth_keys)
+                {
+                    size_t max_lvl = process_node_for_build_grid(epsilon, anchors, current_key, active_entry_node,
+                                                                 dimension, max_level, new_nodes, next_depth_known,
+                                                                 next_depth_keys);
+                    if (max_lvl > current_max_level)
+                    {
+                        current_max_level = max_lvl;
+                    }
+                }
+
+                if (next_depth_keys.size() < 3 * NODE_PARALLEL)
+                {
+                    for (const auto &child_key: next_depth_keys)
+                    {
+                        new_nodes[child_key] = build_node(func, child_key, active_entry_node, dimension, new_nodes);
+                    }
+                }
+                else
+                {
+                    std::vector<Node> created_nodes(next_depth_keys.size());
+                    std::vector<std::future<void> > futures;
+
+                    for (size_t batch_start = 0; batch_start < next_depth_keys.size(); batch_start += NODE_PARALLEL)
+                    {
+                        size_t batch_end = batch_start + NODE_PARALLEL;
+                        if (batch_end > next_depth_keys.size())
+                        {
+                            batch_end = next_depth_keys.size();
+                        }
+                        futures.emplace_back(std::async(std::launch::async,
+                            [this, &func, &next_depth_keys, &active_entry_node, dimension, &new_nodes, &created_nodes,
+                             batch_start, batch_end]()
+                            {
+                                for (size_t i = batch_start; i < batch_end; ++i)
+                                {
+                                    created_nodes[i] = build_node(func, next_depth_keys[i], active_entry_node,
+                                                                  dimension, new_nodes);
+                                }
+                            }));
+                    }
+
+                    for (auto &future: futures)
+                    {
+                        future.get();
+                    }
+
+                    for (size_t i = 0; i < next_depth_keys.size(); ++i)
+                    {
+                        new_nodes[next_depth_keys[i]] = created_nodes[i];
+                    }
+                }
+
+                if (max_nodes_in_grid > 0 && new_nodes.size() >= max_nodes_in_grid)
+                {
+                    break;
+                }
+
+                current_depth_keys = std::move(next_depth_keys);
+            }
+
+            return {new_nodes[entry_point_key], new_nodes};
+        }
+
+        size_t process_node_for_build_grid(ScalarType epsilon,
+                                           const std::vector<std::pair<Argument, Answer> > &anchors,
+                                           const GridKey &current_key, const Node &active_entry_node,
+                                           size_t dimension, size_t max_level, NodeMap &new_nodes,
+                                           NodeSet &next_depth_known, std::vector<GridKey> &next_depth_keys)
+        {
+            Node &node = new_nodes[current_key];
+
+            size_t max_lvl = node.key.level.max();
+
+            bool can_continue = false;
+            bool can_continue_force = max_lvl >= sizeof(size_t) * 8;
+            VectorValue<Direction, IN_DIM> directions(Direction::BOTH);
+
+            size_t level = 0;
+            for (const auto l: node.key.level.coords)
+            {
+                level = std::max(level, l);
+            }
+            ScalarType weight = std::pow(2.0, -static_cast<ScalarType>(level));
+            if (can_continue_force || node.alpha.length() * weight <= epsilon)
+            {
+                directions.fill(Direction::NONE);
+                can_continue = true;
+            }
+
+            if (can_continue && !can_continue_force)
+            {
+                for (auto &anchor: anchors)
+                {
+                    if (node.is_point_in_affect_zone(anchor.first) && (
+                            evaluate_for_dim_and_entry_point(anchor.first, dimension, active_entry_node, new_nodes) -
+                            anchor.second).length() >= epsilon)
+                    {
+                        can_continue = false;
+                        directions |= Basis::get_affect_direction(anchor.first, node.key.level, node.key.index);
+                    }
+                }
+            }
+
+            if (can_continue || can_continue_force)
+            {
+                return max_lvl;
+            }
+
+            node.has_children = true;
+
+            for (size_t i = 0; i < IN_DIM; ++i)
+            {
+                if (node.key.level[i] == 0 || (max_level > 0 && node.key.level[i] >= max_level))
+                    continue;
+
+                GridKey key_left = node.key, key_right = node.key;
+
+                key_left.level[i] = key_right.level[i] = node.key.level[i] + 1;
+
+                if (key_left.level[i] > max_lvl)
+                {
+                    max_lvl = key_left.level[i];
+                }
+
+                key_left.index[i] = 2 * node.key.index[i] - 1;
+                key_right.index[i] = 2 * node.key.index[i] + 1;
+
+                if ((Direction::LEFT & directions[i]) != Direction::NONE)
+                {
+                    add_next_depth_key(key_left, new_nodes, next_depth_known, next_depth_keys);
+                }
+
+                if ((Direction::RIGHT & directions[i]) != Direction::NONE)
+                {
+                    add_next_depth_key(key_right, new_nodes, next_depth_known, next_depth_keys);
+                }
+            }
+
+            return max_lvl;
+        }
+
+        static void add_next_depth_key(const GridKey &key, const NodeMap &new_nodes, NodeSet &next_depth_known,
+                                       std::vector<GridKey> &next_depth_keys)
+        {
+            if (new_nodes.contains(key))
+                return;
+            if (!next_depth_known.emplace(key).second)
+                return;
+            next_depth_keys.push_back(key);
+        }
+
         Answer evaluate_for_dim_and_entry_point(const Argument &x, size_t max_grid_dim, std::optional<Node> entry_point,
                                                 const NodeMap &additional_nodes = {})
         {
@@ -359,12 +536,9 @@ export namespace Compute
         }
 
         template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
-        std::optional<GridKey> create_node(const FUNC &func, const GridKey &key, std::optional<Node> entry_point,
-                                           size_t dimension, NodeMap &additional_nodes)
+        Node build_node(const FUNC &func, const GridKey &key, std::optional<Node> entry_point,
+                        size_t dimension, const NodeMap &additional_nodes)
         {
-            if (additional_nodes.contains(key))
-                return {};
-
             Node node;
             node.key = key;
             for (size_t i = 0; i < IN_DIM; ++i)
@@ -377,7 +551,17 @@ export namespace Compute
 
             node.alpha = etalon - interp;
 
-            additional_nodes[key] = node;
+            return node;
+        }
+
+        template<function_traits::ArrayOpInOut<ScalarType, IN_DIM, OUT_DIM> FUNC>
+        std::optional<GridKey> create_node(const FUNC &func, const GridKey &key, std::optional<Node> entry_point,
+                                           size_t dimension, NodeMap &additional_nodes)
+        {
+            if (additional_nodes.contains(key))
+                return {};
+
+            additional_nodes[key] = build_node(func, key, entry_point, dimension, additional_nodes);
             return key;
         }
 

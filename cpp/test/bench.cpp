@@ -57,7 +57,7 @@ void bench(const std::string &name, size_t n, Func &&f) {
 
 constexpr Compute::ScalarType Pi =
     3.14159265358979323846264338327950288419716939937510582097494459;
-constexpr Compute::BuildType DefaultBuildType = Compute::BuildType::SEQUENTIAL;
+constexpr Compute::BuildType DefaultBuildType = Compute::BuildType::PARALLEL;
 
 TEST(ComputeBenchmark, DomainScalingDifferentDimensions) {
   std::vector<Compute::ScalarType> scales{1, 2, 4};
@@ -186,7 +186,7 @@ TEST(ComputeBenchmark, DifferentialEquationApproaches) {
   for (auto t_max : t_max_values) {
     auto func_with_t = [&](Compute::Point<3> arg) {
       auto x0 = arg[0], y0 = arg[1], t = arg[2];
-      return integrate_rk4(diff_eq, Compute::Point<2>{x0, y0}, 0, t, 50);
+      return integrate_rk4(diff_eq, Compute::Point<2>{x0, y0}, 0, t, t/0.04);
     };
 
     auto integrate1s = [&](Compute::Point<2> state) {
